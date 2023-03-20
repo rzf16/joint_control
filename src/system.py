@@ -269,6 +269,7 @@ class Unicycle(Vehicle):
 
         return artists
 
+
 class Bicycle(Vehicle):
     # @input name [str]: vehicle name
     # @input lf [float]: length from the front axle to the center of gravity
@@ -366,6 +367,7 @@ class Bicycle(Vehicle):
 
         return artists
 
+
 class Quadrotor(Vehicle):
     # @input name [str]: vehicle name
     # @input m [float]: vehicle mass
@@ -447,13 +449,180 @@ class Quadrotor(Vehicle):
         ds[:,4] = dbeta * torch.cos(gamma) - dalpha * torch.sin(gamma)
         ds[:,5] = dalpha + dbeta * torch.sin(gamma) * torch.tan(beta) + dgamma * torch.cos(gamma) * torch.tan(beta)
         ds[:,6] = -(torch.sin(gamma) * torch.sin(alpha) + torch.cos(gamma) * torch.cos(alpha) * torch.sin(beta)) * f_t / self.m
-        # Mistake in the paper????
+        # Mistake in the paper???? They seem to negate the expression from a previous step for no reason
         # ds[:,7] = -(torch.cos(alpha) * torch.sin(gamma) - torch.cos(gamma) * torch.sin(alpha) * torch.sin(beta)) * f_t / self.m
         ds[:,7] = -(torch.cos(gamma) * torch.sin(alpha) * torch.sin(beta) - torch.cos(alpha) * torch.sin(gamma)) * f_t / self.m
         ds[:,8] = self.g - (torch.cos(gamma) * torch.cos(beta)) * f_t / self.m
         ds[:,9] = ((self.inertia[0] - self.inertia[1]) * dgamma * dbeta + tau_z) / self.inertia[2]
         ds[:,10] = ((self.inertia[2] - self.inertia[0]) * dgamma * dalpha + tau_y) / self.inertia[1]
         ds[:,11] = ((self.inertia[1] - self.inertia[2]) * dbeta * dalpha + tau_x) / self.inertia[0]
+        return ds
+
+    @classmethod
+    def get_pose_se3(cls, s: torch.tensor) -> torch.tensor:
+        # Converting from NED to our standard axes
+        return ned_to_nwu(s[:,:6])
+
+    def add_vis2d(self, ax: Axes, s: torch.tensor) -> List[Artist]:
+        artists = []
+        se2 = self.get_pose_se2(s.unsqueeze(0)).squeeze().numpy()
+
+        # Draw structure
+        anchor = se2[:2] - 0.5*np.array([self.vis_params["side_length"], 0.1*self.vis_params["side_length"]])
+        patch = Rectangle(anchor, self.vis_params["side_length"], 0.1*self.vis_params["side_length"],
+                          angle=np.degrees(se2[2]), rotation_point=tuple(se2[:2].tolist()),
+                          color=self.vis_params["color"])
+        artists.append(ax.add_patch(patch))
+
+        anchor = se2[:2] - 0.5*np.array([0.1*self.vis_params["side_length"], self.vis_params["side_length"]])
+        patch = Rectangle(anchor, 0.1*self.vis_params["side_length"], self.vis_params["side_length"],
+                          angle=np.degrees(se2[2]), rotation_point=tuple(se2[:2].tolist()),
+                          color=self.vis_params["color"])
+        artists.append(ax.add_patch(patch))
+
+        # Draw propellers
+        for i in (-0.5*self.vis_params["side_length"], 0.5*self.vis_params["side_length"]):
+            prop_center = se2[:2] + np.array([i,0.])
+            patch = Circle(prop_center, radius=self.vis_params["prop_radius"], color=self.vis_params["color"])
+            artists.append(ax.add_patch(patch))
+
+        for i in (-0.5*self.vis_params["side_length"], 0.5*self.vis_params["side_length"]):
+            prop_center = se2[:2] + np.array([0.,i])
+            patch = Circle(prop_center, radius=self.vis_params["prop_radius"], color=self.vis_params["color"])
+            artists.append(ax.add_patch(patch))
+
+        return artists
+
+    def add_vis3d(self, ax: Axes3D, s: torch.tensor) -> List[Artist]:
+        artists = []
+
+        # Draw body
+        se3 = self.get_pose_se3(s.unsqueeze(0)).squeeze().numpy()
+        # Converting from NED Euler angles to NWU
+        rot = R.from_euler("ZYX", se3[3:].tolist())
+        body_dims = np.array([0.1*self.vis_params["side_length"], self.vis_params["side_length"], self.vis_params["height"]])
+        artists.extend(draw_box(ax, se3[:3], rot.as_quat(), body_dims, self.vis_params["color"]))
+        body_dims = np.array([self.vis_params["side_length"], 0.1*self.vis_params["side_length"], self.vis_params["height"]])
+        artists.extend(draw_box(ax, se3[:3], rot.as_quat(), body_dims, self.vis_params["color"]))
+
+        # Draw propellers
+        for i in (-0.5*self.vis_params["side_length"], 0.5*self.vis_params["side_length"]):
+            # Rotate about the center of the body, not the origin!
+            # prop_center = np.array([i, 0., 0.5*self.vis_params["height"]])
+            prop_center = np.array([i, 0., 0.5*(self.vis_params["height"] + self.vis_params["prop_height"])])
+            prop_center = rot.apply(prop_center)
+            prop_center += se3[:3]
+            # Issues with transparent cylinder!
+            # prop_axis = rot.apply(np.array([0., 0., 1.]))
+            # prop_dims = np.array([self.vis_params["prop_height"], self.vis_params["prop_radius"]])
+            # artists.extend(draw_cylinder(ax, prop_center, prop_axis, prop_dims, self.vis_params["color"]))
+            prop_dims = np.array([2.0*self.vis_params["prop_radius"], 2.0*self.vis_params["prop_radius"], self.vis_params["prop_height"]])
+            artists.extend(draw_box(ax, prop_center, rot.as_quat(), prop_dims, self.vis_params["color"]))
+
+        for i in (-0.5*self.vis_params["side_length"], 0.5*self.vis_params["side_length"]):
+            # Rotate about the center of the body, not the origin!
+            # prop_center = np.array([i, 0., 0.5*self.vis_params["height"]])
+            prop_center = np.array([0., i, 0.5*(self.vis_params["height"] + self.vis_params["prop_height"])])
+            prop_center = rot.apply(prop_center)
+            prop_center += se3[:3]
+            # Issues with transparent cylinder!
+            # prop_axis = rot.apply(np.array([0., 0., 1.]))
+            # prop_dims = np.array([self.vis_params["prop_height"], self.vis_params["prop_radius"]])
+            # artists.extend(draw_cylinder(ax, prop_center, prop_axis, prop_dims, self.vis_params["color"]))
+            prop_dims = np.array([2.0*self.vis_params["prop_radius"], 2.0*self.vis_params["prop_radius"], self.vis_params["prop_height"]])
+            artists.extend(draw_box(ax, prop_center, rot.as_quat(), prop_dims, self.vis_params["color"]))
+
+        return artists
+
+
+class LinearizedQuadrotor(Vehicle):
+    # @input name [str]: vehicle name
+    # @input m [float]: vehicle mass
+    # @input inertia [torch.tensor (3)]: vehicle inertia values (I_x, I_y, I_z)
+    # @input g [float]: acceleration from gravity
+    # @input vis_params [Dict("side_length": float, "height": float, "prop_radius": float, "prop_height": float, "color": str)]:
+    #     paramters for vehicle visualization (side length, height, propeller radius, propeller height, color)
+    # @input s0 [torch.tensor (state_dim)]: initial vehicle state
+    def __init__(self, name: str, m: float, inertia: torch.tensor, vis_params: Dict, s0: torch.tensor, g: float = 9.81):
+        super().__init__(name, s0, vis_params)
+        self.m = m
+        self.inertia = inertia
+        self.g = g
+
+    @classmethod
+    def get_state_description(cls) -> List[VarDescription]:
+        return [
+            VarDescription("x_ned", "real", "x position (NED)", "m"),
+            VarDescription("y_ned", "real", "y position (NED)", "m"),
+            VarDescription("z_ned", "real", "z position (NED)", "m"),
+            VarDescription("alpha", "circle", "z rotation (for ZYX Euler angles)", "rad"),
+            VarDescription("beta", "circle", "y rotation (for ZYX Euler angles)", "rad"),
+            VarDescription("gamma", "circle", "x rotation (for ZYX Euler angles)", "rad"),
+            VarDescription("u_ned", "real", "x velocity (body frame)", "m/s"),
+            VarDescription("v_ned", "real", "y velocity (body frame)", "m/s"),
+            VarDescription("w_ned", "real", "z velocity (body frame)", "m/s"),
+            VarDescription("dalpha", "real", "z angular velocity (body frame)", "rad/s"),
+            VarDescription("dbeta", "real", "y angular velocity (body frame)", "rad/s"),
+            VarDescription("dgamma", "real", "x angular velocity (body frame)", "rad/s")
+        ]
+
+    @classmethod
+    def get_control_description(cls) -> List[VarDescription]:
+        return [
+            VarDescription("f_t", "real", "vertical thrust", "N"),
+            VarDescription("tau_x", "real", "torque about x", "N"),
+            VarDescription("tau_y", "real", "torque about y", "N"),
+            VarDescription("tau_z", "real", "torque about z", "N")
+        ]
+
+    @classmethod
+    def get_state_plot_layout(cls) -> np.ndarray:
+        return np.array([
+            [0, 3, 6, 9],
+            [1, 4, 7, 10],
+            [2, 5, 8, 11]
+        ])
+
+    @classmethod
+    def get_control_plot_layout(cls) -> np.ndarray:
+        return np.array([
+            [0],
+            [1],
+            [2],
+            [3]
+        ])
+
+    def continuous_dynamics(self, t: torch.tensor, s: torch.tensor, u: torch.tensor) -> torch.tensor:
+        # TODO: think about constraining the yaw and yaw rate to zero? as in webb2013_kinodynamic
+        # This should be fine since indexing returns views, not copies!
+        alpha = s[:,3] # psi
+        beta = s[:,4] # theta
+        gamma = s[:,5] # phi
+        u_ned = s[:,6]
+        v_ned = s[:,7]
+        w_ned = s[:,8]
+        dalpha = s[:,9] # r
+        dbeta = s[:,10] # q
+        dgamma = s[:,11] # p
+        f_t = u[:,0]
+        tau_x = u[:,1]
+        tau_y = u[:,2]
+        tau_z = u[:,3]
+
+        ds = torch.zeros_like(s)
+        ds[:,0] = u_ned
+        ds[:,1] = v_ned
+        ds[:,2] = w_ned
+        ds[:,3] = dalpha
+        ds[:,4] = dbeta
+        ds[:,5] = dgamma
+        ds[:,6] = -self.g * beta
+        ds[:,7] = self.g * gamma
+        # Another mistake in the paper? They omit gravity here
+        ds[:,8] = self.g - f_t / self.m
+        ds[:,9] = tau_z / self.inertia[2]
+        ds[:,10] = tau_y / self.inertia[1]
+        ds[:,11] = tau_x / self.inertia[0]
         return ds
 
     @classmethod

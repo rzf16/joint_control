@@ -198,7 +198,6 @@ class DataRecorder:
         plt.show()
 
     # Animates the 3D trajectory of vehicles
-    # TODO: investigate how to set camera angle
     # TODO: investigate why the live animation doesn't show vehicle bodies
     # @input vehicles [List[Vehicle]]: vehicles to animate
     # @input hold_traj [bool]: maintain a line representing the 2D position trajectory
