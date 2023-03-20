@@ -63,6 +63,7 @@ class DataRecorder:
         description = vehicle.get_state_description()
 
         fig, ax = plt.subplots(nrows=layout.shape[0], ncols=layout.shape[1], sharex=True, squeeze=False)
+        fig.tight_layout()
         fig.supxlabel("time")
         fig.suptitle(f"{vehicle.name} state trajectory")
         for i, row in enumerate(ax):
@@ -81,6 +82,7 @@ class DataRecorder:
         description = vehicle.get_control_description()
 
         fig, ax = plt.subplots(nrows=layout.shape[0], ncols=layout.shape[1], sharex=True, squeeze=False)
+        fig.tight_layout()
         fig.supxlabel("time")
         fig.suptitle(f"{vehicle.name} control trajectory")
         for i, row in enumerate(ax):
@@ -203,9 +205,11 @@ class DataRecorder:
     # @input n_frames [Optional[int]]: number of frames to animate
     # @input fps [int]: frames per second
     # @input end_wait [float]: seconds to wait at the end before finishing the animation
+    # @input camera_angle Optional[Tuple[float] (3)]: camera angle (elevation, azimuth, roll)
     # @input write [Optional[str]]: filename to write the animation to; None indicates not to write
     def animate3d(self, vehicles: List[Vehicle], hold_traj: bool = True,
-                  n_frames: Optional[int] = None, fps: int = 5, end_wait: float = 1.0, write: Optional[str] = None):
+                  n_frames: Optional[int] = None, fps: int = 5, end_wait: float = 1.0, write: Optional[str] = None,
+                  camera_angle: Optional[np.ndarray] = None):
         fig = plt.figure()
         ax = Axes3D(fig, auto_add_to_figure=False, aspect="equal")
         fig.add_axes(ax)
@@ -226,6 +230,8 @@ class DataRecorder:
         ax.set_zlim(lims[2])
         equalize_axes3d(ax)
         ax.autoscale(False)
+        if camera_angle is not None:
+            ax.view_init(elev=camera_angle[0], azim=camera_angle[1], roll=camera_angle[2])
 
         traj_lines = [ax.plot([],[],[], color=vehicle.vis_params["color"])[0] for vehicle in vehicles] if hold_traj else []
         vehicle_drawings = [[] for vehicle in vehicles]

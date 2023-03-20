@@ -15,10 +15,13 @@ from scipy.spatial.transform import Rotation as R
 from src.vis_utils import draw_box, draw_cylinder
 from matplotlib.axes import Axes
 from matplotlib.artist import Artist
-from matplotlib.patches import Rectangle
+from matplotlib.patches import Rectangle, Circle
 from mpl_toolkits.mplot3d import Axes3D
 
-from src.utils import wrap_radians
+from src.utils import wrap_radians, ned_to_nwu, nwu_to_ned
+
+
+# TODO: change get_pos functions to get_pose
 
 
 # Class for describing a state or control variable
@@ -27,6 +30,7 @@ class VarDescription:
     name: str
     var_type: str # real or circle
     description: str
+    unit: str
 
 
 class Vehicle(ABC):
@@ -162,7 +166,7 @@ class Vehicle(ABC):
 
 class Unicycle(Vehicle):
     # @input name [str]: vehicle name
-    # @input vis_params [Dict("length": float, "width": float, "h"eight: float,
+    # @input vis_params [Dict("length": float, "width": float, "height": float,
     #                         "wheel_radius": float, "wheel_width": float, "color": str)]:
     #     paramters for vehicle visualization (length, width, height, wheel radius, wheel width, color)
     # @input s0 [torch.tensor (state_dim)]: initial vehicle state
@@ -172,16 +176,16 @@ class Unicycle(Vehicle):
     @classmethod
     def get_state_description(cls) -> List[VarDescription]:
         return [
-            VarDescription("x", "real", "x position"),
-            VarDescription("y", "real", "y position"),
-            VarDescription("theta", "circle", "yaw"),
+            VarDescription("x", "real", "x position", "m"),
+            VarDescription("y", "real", "y position", "m"),
+            VarDescription("theta", "circle", "yaw", "rad"),
         ]
 
     @classmethod
     def get_control_description(cls) -> List[VarDescription]:
         return [
-            VarDescription("v", "real", "velocity"),
-            VarDescription("omega", "circle", "angular velocity")
+            VarDescription("v", "real", "velocity", "m/s"),
+            VarDescription("omega", "circle", "angular velocity", "rad/s")
         ]
 
     @classmethod
@@ -213,12 +217,13 @@ class Unicycle(Vehicle):
 
     @classmethod
     def get_pos3d(cls, s: torch.tensor) -> torch.tensor:
-        return torch.cat((s[:,:2], torch.ones((s.size(0), 1))), dim=1)
+        return torch.cat((s[:,:2], torch.zeros((s.size(0), 1))), dim=1)
 
     def add_vis2d(self, ax: Axes, s: torch.tensor) -> List[Artist]:
-        anchor = s[:2].numpy() - 0.5*np.array([self.vis_params["length"], self.vis_params["width"]])
+        center = self.get_pos2d(s.unsqueeze(0)).squeeze()
+        anchor = center.numpy() - 0.5*np.array([self.vis_params["length"], self.vis_params["width"]])
         patch = Rectangle(anchor, self.vis_params["length"], self.vis_params["width"],
-                          angle=np.degrees(s[2]), rotation_point=tuple(s[:2].tolist()),
+                          angle=np.degrees(s[2]), rotation_point=tuple(center.tolist()),
                           color=self.vis_params["color"])
         ax.add_patch(patch)
         return [patch]
@@ -227,7 +232,8 @@ class Unicycle(Vehicle):
         artists = []
 
         # Draw body
-        body_center = np.append(s[:2].numpy(), 0.5*self.vis_params["height"] + 0.5*self.vis_params["wheel_radius"])
+        center = self.get_pos2d(s.unsqueeze(0)).squeeze()
+        body_center = np.append(center.numpy(), 0.5*self.vis_params["height"] + 0.5*self.vis_params["wheel_radius"])
         rot = R.from_euler("z", s[2])
         body_dims = np.array([self.vis_params["length"], self.vis_params["width"], self.vis_params["height"]])
         artists.extend(draw_box(ax, body_center, rot.as_quat(), body_dims, self.vis_params["color"]))
@@ -240,7 +246,7 @@ class Unicycle(Vehicle):
         #         wheel_center = rot.apply(wheel_center)
         #         wheel_center += body_center
         #         wheel_axis = rot.apply(np.array([0., 1., 0.]))
-        #         wheel_dims = np.array([self.vis_params["wheel_radius"], self.vis_params["wheel_width"]])
+        #         wheel_dims = np.array([self.vis_params["wheel_width"], self.vis_params["wheel_radius"]])
         #         artists.extend(draw_cylinder(ax, wheel_center, wheel_axis, wheel_dims, self.vis_params["color"]))
 
         return artists
@@ -249,7 +255,7 @@ class Bicycle(Vehicle):
     # @input name [str]: vehicle name
     # @input lf [float]: length from the front axle to the center of gravity
     # @input lr [float]: length from the rear axle to the center of gravity
-    # @input vis_params [Dict("length": float, "width": float, "h"eight: float,
+    # @input vis_params [Dict("length": float, "width": float, "height": float,
     #                         "wheel_radius": float, "wheel_width": float, "color": str)]:
     #     paramters for vehicle visualization (length, width, height, wheel radius, wheel width, color)
     # @input s0 [torch.tensor (state_dim)]: initial vehicle state
@@ -261,17 +267,17 @@ class Bicycle(Vehicle):
     @classmethod
     def get_state_description(cls) -> List[VarDescription]:
         return [
-            VarDescription("x", "real", "x position"),
-            VarDescription("y", "real", "y position"),
-            VarDescription("psi", "circle", "yaw"),
-            VarDescription("v", "real", "velocity")
+            VarDescription("x", "real", "x position", "m"),
+            VarDescription("y", "real", "y position", "m"),
+            VarDescription("psi", "circle", "yaw", "rad"),
+            VarDescription("v", "real", "velocity", "m/s")
         ]
 
     @classmethod
     def get_control_description(cls) -> List[VarDescription]:
         return [
-            VarDescription("a", "real", "acceleration"),
-            VarDescription("delta", "circle", "steering angle")
+            VarDescription("a", "real", "acceleration", "m/s^2"),
+            VarDescription("delta", "circle", "steering angle", "rad")
         ]
 
     @classmethod
@@ -305,12 +311,13 @@ class Bicycle(Vehicle):
 
     @classmethod
     def get_pos3d(cls, s: torch.tensor) -> torch.tensor:
-        return torch.cat((s[:,:2], torch.ones((s.size(0), 1))), dim=1)
+        return torch.cat((s[:,:2], torch.zeros((s.size(0), 1))), dim=1)
 
     def add_vis2d(self, ax: Axes, s: torch.tensor) -> List[Artist]:
-        anchor = s[:2].numpy() - 0.5*np.array([self.vis_params["length"], self.vis_params["width"]])
+        center = self.get_pos2d(s.unsqueeze(0)).squeeze()
+        anchor = center.numpy() - 0.5*np.array([self.vis_params["length"], self.vis_params["width"]])
         patch = Rectangle(anchor, self.vis_params["length"], self.vis_params["width"],
-                          angle=np.degrees(s[2]), rotation_point=tuple(s[:2].tolist()),
+                          angle=np.degrees(s[2]), rotation_point=tuple(center.tolist()),
                           color=self.vis_params["color"])
         ax.add_patch(patch)
         return [patch]
@@ -319,7 +326,8 @@ class Bicycle(Vehicle):
         artists = []
 
         # Draw body
-        body_center = np.append(s[:2].numpy(), 0.5*self.vis_params["height"] + 0.5*self.vis_params["wheel_radius"])
+        center = self.get_pos2d(s.unsqueeze(0)).squeeze()
+        body_center = np.append(center.numpy(), 0.5*self.vis_params["height"] + 0.5*self.vis_params["wheel_radius"])
         rot = R.from_euler("z", s[2])
         body_dims = np.array([self.vis_params["length"], self.vis_params["width"], self.vis_params["height"]])
         artists.extend(draw_box(ax, body_center, rot.as_quat(), body_dims, self.vis_params["color"]))
@@ -332,7 +340,136 @@ class Bicycle(Vehicle):
         #         wheel_center = rot.apply(wheel_center)
         #         wheel_center += body_center
         #         wheel_axis = rot.apply(np.array([0., 1., 0.]))
-        #         wheel_dims = np.array([self.vis_params["wheel_radius"], self.vis_params["wheel_width"]])
+        #         wheel_dims = np.array([self.vis_params["wheel_width"], self.vis_params["wheel_radius"]])
         #         artists.extend(draw_cylinder(ax, wheel_center, wheel_axis, wheel_dims, self.vis_params["color"]))
+
+        return artists
+
+class Quadrotor(Vehicle):
+    # @input name [str]: vehicle name
+    # @input m [float]: vehicle mass
+    # @input inertia [torch.tensor (3)]: vehicle inertia values (I_x, I_y, I_z)
+    # @input g [float]: acceleration from gravity
+    # @input vis_params [Dict("side_length": float, "height": float, "prop_radius": float, "prop_height": float, "color": str)]:
+    #     paramters for vehicle visualization (side length, height, propeller radius, propeller height, color)
+    # @input s0 [torch.tensor (state_dim)]: initial vehicle state
+    def __init__(self, name: str, m: float, inertia: torch.tensor, vis_params: Dict, s0: torch.tensor, g: float = 9.81):
+        super().__init__(name, s0, vis_params)
+        self.m = m
+        self.inertia = inertia
+        self.g = g
+
+    @classmethod
+    def get_state_description(cls) -> List[VarDescription]:
+        return [
+            VarDescription("x_ned", "real", "x position (NED)", "m"),
+            VarDescription("y_ned", "real", "y position (NED)", "m"),
+            VarDescription("z_ned", "real", "z position (NED)", "m"),
+            VarDescription("alpha", "circle", "z rotation (for ZYX Euler angles)", "rad"),
+            VarDescription("beta", "circle", "y rotation (for ZYX Euler angles)", "rad"),
+            VarDescription("gamma", "circle", "x rotation (for ZYX Euler angles)", "rad"),
+            VarDescription("dx_ned", "real", "x velocity (NED)", "m/s"),
+            VarDescription("dy_ned", "real", "y velocity (NED)", "m/s"),
+            VarDescription("dz_ned", "real", "z velocity (NED)", "m/s"),
+            VarDescription("dalpha", "real", "z angular velocity (body frame)", "rad/s"),
+            VarDescription("dbeta", "real", "y angular velocity (body frame)", "rad/s"),
+            VarDescription("dgamma", "real", "x angular velocity (body frame)", "rad/s")
+        ]
+
+    @classmethod
+    def get_control_description(cls) -> List[VarDescription]:
+        return [
+            VarDescription("f_t", "real", "vertical thrust", "N"),
+            VarDescription("tau_x", "real", "torque about x", "N"),
+            VarDescription("tau_y", "real", "torque about y", "N"),
+            VarDescription("tau_z", "real", "torque about z", "N")
+        ]
+
+    @classmethod
+    def get_state_plot_layout(cls) -> np.ndarray:
+        return np.array([
+            [0, 3, 6, 9],
+            [1, 4, 7, 10],
+            [2, 5, 8, 11]
+        ])
+
+    @classmethod
+    def get_control_plot_layout(cls) -> np.ndarray:
+        return np.array([
+            [0],
+            [1],
+            [2],
+            [3]
+        ])
+
+    def continuous_dynamics(self, t: torch.tensor, s: torch.tensor, u: torch.tensor) -> torch.tensor:
+        # This should be fine since indexing returns views, not copies!
+        alpha = s[:,3] # psi
+        beta = s[:,4] # theta
+        gamma = s[:,5] # phi
+        dx = s[:,6]
+        dy = s[:,7]
+        dz = s[:,8]
+        dalpha = s[:,9] # r
+        dbeta = s[:,10] # q
+        dgamma = s[:,11] # p
+        f_t = u[:,0]
+        tau_x = u[:,1]
+        tau_y = u[:,2]
+        tau_z = u[:,3]
+
+        ds = torch.zeros_like(s)
+        ds[:,0] = dx
+        ds[:,1] = dy
+        ds[:,2] = dz
+        ds[:,3] = dbeta * torch.sin(gamma) / torch.cos(beta) + dgamma * torch.cos(gamma) / torch.cos(beta)
+        ds[:,4] = dbeta * torch.cos(gamma) - dalpha * torch.sin(gamma)
+        ds[:,5] = dalpha + dbeta * torch.sin(gamma) * torch.tan(beta) + dgamma * torch.cos(gamma) * torch.tan(beta)
+        ds[:,6] = -(torch.sin(gamma) * torch.sin(alpha) + torch.cos(gamma) * torch.cos(alpha) * torch.sin(beta)) * f_t / self.m
+        # Mistake in the paper????
+        # ds[:,7] = -(torch.cos(alpha) * torch.sin(gamma) - torch.cos(gamma) * torch.sin(alpha) * torch.sin(beta)) * f_t / self.m
+        ds[:,7] = -(torch.cos(gamma) * torch.sin(alpha) * torch.sin(beta) - torch.cos(alpha) * torch.sin(gamma)) * f_t / self.m
+        ds[:,8] = self.g - (torch.cos(gamma) * torch.cos(beta)) * f_t / self.m
+        ds[:,9] = ((self.inertia[0] - self.inertia[1]) * dgamma * dbeta + tau_z) / self.inertia[2]
+        ds[:,10] = ((self.inertia[2] - self.inertia[0]) * dgamma * dalpha + tau_y) / self.inertia[1]
+        ds[:,11] = ((self.inertia[1] - self.inertia[2]) * dbeta * dalpha + tau_x) / self.inertia[0]
+        return ds
+
+    @classmethod
+    def get_pos3d(cls, s: torch.tensor) -> torch.tensor:
+        # Converting from NED to our standard axes
+        return ned_to_nwu(s[:,:6])[:,:3]
+
+    def add_vis2d(self, ax: Axes, s: torch.tensor) -> List[Artist]:
+        center = self.get_pos2d(s.unsqueeze(0)).squeeze()
+        patch = Circle(center.numpy(), radius=0.5*self.vis_params["side_length"],
+                       color=self.vis_params["color"])
+        ax.add_patch(patch)
+        return [patch]
+
+    def add_vis3d(self, ax: Axes3D, s: torch.tensor) -> List[Artist]:
+        artists = []
+
+        # Draw body
+        body_center = self.get_pos3d(s.unsqueeze(0)).squeeze().numpy()
+        # Converting from NED Euler angles to NWU 
+        rot = R.from_euler("ZYX", ned_to_nwu(s[:6].unsqueeze(0)).squeeze()[3:].tolist())
+        body_dims = np.array([self.vis_params["side_length"], self.vis_params["side_length"], self.vis_params["height"]])
+        artists.extend(draw_box(ax, body_center, rot.as_quat(), body_dims, self.vis_params["color"]))
+
+        # Draw propellers
+        for i in (-0.5*self.vis_params["side_length"], 0.5*self.vis_params["side_length"]):
+            for j in (-0.5*self.vis_params["side_length"], 0.5*self.vis_params["side_length"]):
+                # Rotate about the center of the body, not the origin!
+                # prop_center = np.array([i, j, 0.5*self.vis_params["height"]])
+                prop_center = np.array([i, j, 0.5*(self.vis_params["height"] + self.vis_params["prop_height"])])
+                prop_center = rot.apply(prop_center)
+                prop_center += body_center
+                # Issues with transparent cylinder!
+                # prop_axis = rot.apply(np.array([0., 0., 1.]))
+                # prop_dims = np.array([self.vis_params["prop_height"], self.vis_params["prop_radius"]])
+                # artists.extend(draw_cylinder(ax, prop_center, prop_axis, prop_dims, self.vis_params["color"]))
+                prop_dims = np.array([2.0*self.vis_params["prop_radius"], 2.0*self.vis_params["prop_radius"], self.vis_params["prop_height"]])
+                artists.extend(draw_box(ax, prop_center, rot.as_quat(), prop_dims, self.vis_params["color"]))
 
         return artists

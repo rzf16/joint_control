@@ -38,12 +38,12 @@ def draw_box(ax: Axes3D, center: np.ndarray, quat: np.ndarray, dims: np.ndarray,
         x = vertices[permuted_half_dims[:,i] < 0, 0]
         y = vertices[permuted_half_dims[:,i] < 0, 1]
         z = vertices[permuted_half_dims[:,i] < 0, 2]
-        artists.append(ax.plot_surface(x.reshape((2,2)), y.reshape((2,2)), z.reshape((2,2)), color=color))
+        artists.append(ax.plot_surface(x.reshape((2,2)), y.reshape((2,2)), z.reshape((2,2)), color=color, antialiased=False))
 
         x = vertices[permuted_half_dims[:,i] > 0, 0]
         y = vertices[permuted_half_dims[:,i] > 0, 1]
         z = vertices[permuted_half_dims[:,i] > 0, 2]
-        artists.append(ax.plot_surface(x.reshape((2,2)), y.reshape((2,2)), z.reshape((2,2)), color=color))
+        artists.append(ax.plot_surface(x.reshape((2,2)), y.reshape((2,2)), z.reshape((2,2)), color=color, antialiased=False))
 
     return artists
 
@@ -76,7 +76,8 @@ def draw_cylinder(ax: Axes3D, center: np.ndarray, axis: np.ndarray, dims: np.nda
           dims[1] * np.sin(np.expand_dims(batch_theta, 1)) @ np.expand_dims(v1, 0) + \
           dims[1] * np.cos(np.expand_dims(batch_theta, 1)) @ np.expand_dims(v2, 0)
 
-    artists.append(ax.plot_surface(pts[:,0].reshape((n,n)), pts[:,1].reshape((n,n)), pts[:,2].reshape((n,n)), color=color))
+    # TODO: issue with surface appearing transparent!
+    artists.append(ax.plot_surface(pts[:,0].reshape((n,n)), pts[:,1].reshape((n,n)), pts[:,2].reshape((n,n)), color=color, antialiased=False))
     artists.append(ax.add_collection3d(Poly3DCollection([pts[:n,:], pts[-n:,:]], color=color)))
 
     return artists
