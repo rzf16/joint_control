@@ -21,7 +21,7 @@ def main():
     quad1_vis_params = {
         "side_length": 30.0,
         "height": 10.0,
-        "prop_radius": 10.0,
+        "prop_radius": 5.0,
         "prop_height": 5.0,
         "color": "deepskyblue"
     }
@@ -33,13 +33,13 @@ def main():
     bike1_vis_params = {
         "length": 10.0,
         "width": 5.0,
-        "height": 1.0,
-        "wheel_radius": 0.4,
-        "wheel_width": 0.3,
+        "height": 5.0,
+        "wheel_radius": 2.0,
+        "wheel_width": 1.0,
         "color": "lime"
     }
     bike1_s0 = torch.zeros(4)
-    bike1 = Bicycle("bike1", 1.0, 1.0, bike1_vis_params, bike1_s0)
+    bike1 = Bicycle("bike1", 4.0, 4.0, bike1_vis_params, bike1_s0)
 
     recorder = DataRecorder([quad1, bike1])
 
@@ -58,11 +58,12 @@ def main():
     recorder.log_state(bike1, state_traj, timestamps)
     recorder.log_control(bike1, bike1_u, torch.linspace(0.0, bike1_tf, bike1_u.size(0)))
 
-    recorder.animate3d([quad1], write="media/traj.mp4")
+    recorder.animate2d([bike1, quad1], write="media/traj.mp4")
     # fig = plt.figure()
     # ax = Axes3D(fig, auto_add_to_figure=False, aspect="equal")
     # fig.add_axes(ax)
     # quad1.add_vis3d(ax, quad1.get_state())
+    # # bike1.add_vis3d(ax, bike1.get_state())
     # equalize_axes3d(ax)
     # # ax.autoscale(False)
     # plt.show()

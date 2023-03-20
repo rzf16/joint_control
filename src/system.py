@@ -133,19 +133,34 @@ class Vehicle(ABC):
         self.set_state(state_traj[-1,:])
         return state_traj, timestamps
 
+    # Extracts the SE(2) vehicle pose from a batch of states
+    # @input s [torch.tensor (B x state_dim)]: batch of states
+    # @output [torch.tensor (B x 3)]: batch of SE(2) poses
+    @classmethod
+    def get_pose_se2(cls, s: torch.tensor) -> torch.tensor:
+        se3 = cls.get_pose_se3(s)
+        return torch.stack((se3[:,0], se3[:,1], se3[:,3]), dim=1)
+
+    # Extracts the SE(3) vehicle pose from a batch of states
+    # @input s [torch.tensor (B x state_dim)]: batch of states
+    # @output [torch.tensor (B x 6)]: batch of SE(3) poses with ZYX Euler angles
+    @abstractclassmethod
+    def get_pose_se3(cls, s: torch.tensor) -> torch.tensor:
+        raise NotImplementedError()
+
     # Extracts the 2D xy vehicle position from a batch of states
     # @input s [torch.tensor (B x state_dim)]: batch of states
     # @output [torch.tensor (B x 2)]: batch of 2D positions
     @classmethod
     def get_pos2d(cls, s: torch.tensor) -> torch.tensor:
-        return cls.get_pos3d(s)[:,:2]
+        return cls.get_pose_se3(s)[:,:2]
 
     # Extracts the 3D vehicle position from a batch of states
     # @input s [torch.tensor (B x state_dim)]: batch of states
-    # @output [torch.tensor (B x 3)]: batch of positions
-    @abstractclassmethod
+    # @output [torch.tensor (B x 3)]: batch of 3D positions
+    @classmethod
     def get_pos3d(cls, s: torch.tensor) -> torch.tensor:
-        raise NotImplementedError()
+        return cls.get_pose_se3(s)[:,:3]
 
     # Adds the 2D vehicle visualization to Matplotlib axes
     # @input ax [Axes]: axes to visualize on
@@ -216,14 +231,14 @@ class Unicycle(Vehicle):
         return ds
 
     @classmethod
-    def get_pos3d(cls, s: torch.tensor) -> torch.tensor:
-        return torch.cat((s[:,:2], torch.zeros((s.size(0), 1))), dim=1)
+    def get_pose_se3(cls, s: torch.tensor) -> torch.tensor:
+        return torch.cat((s[:,:2], torch.zeros((s.size(0), 1)), s[:,2].unsqueeze(1), torch.zeros((s.size(0), 2))), dim=1)
 
     def add_vis2d(self, ax: Axes, s: torch.tensor) -> List[Artist]:
-        center = self.get_pos2d(s.unsqueeze(0)).squeeze()
-        anchor = center.numpy() - 0.5*np.array([self.vis_params["length"], self.vis_params["width"]])
+        se2 = self.get_pose_se2(s.unsqueeze(0)).squeeze().numpy()
+        anchor = se2[:2] - 0.5*np.array([self.vis_params["length"], self.vis_params["width"]])
         patch = Rectangle(anchor, self.vis_params["length"], self.vis_params["width"],
-                          angle=np.degrees(s[2]), rotation_point=tuple(center.tolist()),
+                          angle=np.degrees(se2[2]), rotation_point=tuple(se2[:2].tolist()),
                           color=self.vis_params["color"])
         ax.add_patch(patch)
         return [patch]
@@ -232,22 +247,25 @@ class Unicycle(Vehicle):
         artists = []
 
         # Draw body
-        center = self.get_pos2d(s.unsqueeze(0)).squeeze()
-        body_center = np.append(center.numpy(), 0.5*self.vis_params["height"] + 0.5*self.vis_params["wheel_radius"])
-        rot = R.from_euler("z", s[2])
+        se2 = self.get_pose_se2(s.unsqueeze(0)).squeeze().numpy()
+        body_center = np.append(se2[:2], 0.5*self.vis_params["height"] + 0.5*self.vis_params["wheel_radius"])
+        rot = R.from_euler("z", se2[2])
         body_dims = np.array([self.vis_params["length"], self.vis_params["width"], self.vis_params["height"]])
         artists.extend(draw_box(ax, body_center, rot.as_quat(), body_dims, self.vis_params["color"]))
 
         # Draw wheels
-        # for l in (-self.lr, self.lf):
-        #     for j in (-1, 1):
-        #         # Rotate about the center of the body, not the origin!
-        #         wheel_center = np.array([l, j*0.5*(self.vis_params["width"] + self.vis_params["wheel_width"]), 0.0])
-        #         wheel_center = rot.apply(wheel_center)
-        #         wheel_center += body_center
-        #         wheel_axis = rot.apply(np.array([0., 1., 0.]))
-        #         wheel_dims = np.array([self.vis_params["wheel_width"], self.vis_params["wheel_radius"]])
-        #         artists.extend(draw_cylinder(ax, wheel_center, wheel_axis, wheel_dims, self.vis_params["color"]))
+        for l in (-self.lr, self.lf):
+            for j in (-1, 1):
+                # Rotate about the center of the body, not the origin!
+                wheel_center = np.array([l, j*0.5*(self.vis_params["width"] + self.vis_params["wheel_width"]), self.vis_params["wheel_radius"]])
+                wheel_center = rot.apply(wheel_center)
+                wheel_center += np.append(body_center[:2], 0.)
+                # Cylinders take forever to plot
+                # wheel_axis = rot.apply(np.array([0., 1., 0.]))
+                # wheel_dims = np.array([self.vis_params["wheel_width"], self.vis_params["wheel_radius"]])
+                # artists.extend(draw_cylinder(ax, wheel_center, wheel_axis, wheel_dims, self.vis_params["color"]))
+                wheel_dims = np.array([2.0*self.vis_params["wheel_radius"], self.vis_params["wheel_width"], 2.0*self.vis_params["wheel_radius"]])
+                artists.extend(draw_box(ax, wheel_center, rot.as_quat(), wheel_dims, self.vis_params["color"]))
 
         return artists
 
@@ -310,14 +328,14 @@ class Bicycle(Vehicle):
         return ds
 
     @classmethod
-    def get_pos3d(cls, s: torch.tensor) -> torch.tensor:
-        return torch.cat((s[:,:2], torch.zeros((s.size(0), 1))), dim=1)
+    def get_pose_se3(cls, s: torch.tensor) -> torch.tensor:
+        return torch.cat((s[:,:2], torch.zeros((s.size(0), 1)), s[:,2].unsqueeze(1), torch.zeros((s.size(0), 2))), dim=1)
 
     def add_vis2d(self, ax: Axes, s: torch.tensor) -> List[Artist]:
-        center = self.get_pos2d(s.unsqueeze(0)).squeeze()
-        anchor = center.numpy() - 0.5*np.array([self.vis_params["length"], self.vis_params["width"]])
+        se2 = self.get_pose_se2(s.unsqueeze(0)).squeeze().numpy()
+        anchor = se2[:2] - 0.5*np.array([self.vis_params["length"], self.vis_params["width"]])
         patch = Rectangle(anchor, self.vis_params["length"], self.vis_params["width"],
-                          angle=np.degrees(s[2]), rotation_point=tuple(center.tolist()),
+                          angle=np.degrees(se2[2]), rotation_point=tuple(se2[:2].tolist()),
                           color=self.vis_params["color"])
         ax.add_patch(patch)
         return [patch]
@@ -326,22 +344,25 @@ class Bicycle(Vehicle):
         artists = []
 
         # Draw body
-        center = self.get_pos2d(s.unsqueeze(0)).squeeze()
-        body_center = np.append(center.numpy(), 0.5*self.vis_params["height"] + 0.5*self.vis_params["wheel_radius"])
-        rot = R.from_euler("z", s[2])
+        se2 = self.get_pose_se2(s.unsqueeze(0)).squeeze().numpy()
+        body_center = np.append(se2[:2], 0.5*self.vis_params["height"] + 0.5*self.vis_params["wheel_radius"])
+        rot = R.from_euler("z", se2[2])
         body_dims = np.array([self.vis_params["length"], self.vis_params["width"], self.vis_params["height"]])
         artists.extend(draw_box(ax, body_center, rot.as_quat(), body_dims, self.vis_params["color"]))
 
         # Draw wheels
-        # for l in (-self.lr, self.lf):
-        #     for j in (-1, 1):
-        #         # Rotate about the center of the body, not the origin!
-        #         wheel_center = np.array([l, j*0.5*(self.vis_params["width"] + self.vis_params["wheel_width"]), 0.0])
-        #         wheel_center = rot.apply(wheel_center)
-        #         wheel_center += body_center
-        #         wheel_axis = rot.apply(np.array([0., 1., 0.]))
-        #         wheel_dims = np.array([self.vis_params["wheel_width"], self.vis_params["wheel_radius"]])
-        #         artists.extend(draw_cylinder(ax, wheel_center, wheel_axis, wheel_dims, self.vis_params["color"]))
+        for l in (-self.lr, self.lf):
+            for j in (-1, 1):
+                # Rotate about the center of the body, not the origin!
+                wheel_center = np.array([l, j*0.5*(self.vis_params["width"] + self.vis_params["wheel_width"]), self.vis_params["wheel_radius"]])
+                wheel_center = rot.apply(wheel_center)
+                wheel_center += np.append(body_center[:2], 0.)
+                # Cylinders take forever to plot
+                # wheel_axis = rot.apply(np.array([0., 1., 0.]))
+                # wheel_dims = np.array([self.vis_params["wheel_width"], self.vis_params["wheel_radius"]])
+                # artists.extend(draw_cylinder(ax, wheel_center, wheel_axis, wheel_dims, self.vis_params["color"]))
+                wheel_dims = np.array([2.0*self.vis_params["wheel_radius"], self.vis_params["wheel_width"], 2.0*self.vis_params["wheel_radius"]])
+                artists.extend(draw_box(ax, wheel_center, rot.as_quat(), wheel_dims, self.vis_params["color"]))
 
         return artists
 
@@ -436,40 +457,77 @@ class Quadrotor(Vehicle):
         return ds
 
     @classmethod
-    def get_pos3d(cls, s: torch.tensor) -> torch.tensor:
+    def get_pose_se3(cls, s: torch.tensor) -> torch.tensor:
         # Converting from NED to our standard axes
-        return ned_to_nwu(s[:,:6])[:,:3]
+        return ned_to_nwu(s[:,:6])
 
     def add_vis2d(self, ax: Axes, s: torch.tensor) -> List[Artist]:
-        center = self.get_pos2d(s.unsqueeze(0)).squeeze()
-        patch = Circle(center.numpy(), radius=0.5*self.vis_params["side_length"],
-                       color=self.vis_params["color"])
-        ax.add_patch(patch)
-        return [patch]
+        artists = []
+        se2 = self.get_pose_se2(s.unsqueeze(0)).squeeze().numpy()
+
+        # Draw structure
+        anchor = se2[:2] - 0.5*np.array([self.vis_params["side_length"], 0.1*self.vis_params["side_length"]])
+        patch = Rectangle(anchor, self.vis_params["side_length"], 0.1*self.vis_params["side_length"],
+                          angle=np.degrees(se2[2]), rotation_point=tuple(se2[:2].tolist()),
+                          color=self.vis_params["color"])
+        artists.append(ax.add_patch(patch))
+
+        anchor = se2[:2] - 0.5*np.array([0.1*self.vis_params["side_length"], self.vis_params["side_length"]])
+        patch = Rectangle(anchor, 0.1*self.vis_params["side_length"], self.vis_params["side_length"],
+                          angle=np.degrees(se2[2]), rotation_point=tuple(se2[:2].tolist()),
+                          color=self.vis_params["color"])
+        artists.append(ax.add_patch(patch))
+
+        # Draw propellers
+        for i in (-0.5*self.vis_params["side_length"], 0.5*self.vis_params["side_length"]):
+            prop_center = se2[:2] + np.array([i,0.])
+            patch = Circle(prop_center, radius=self.vis_params["prop_radius"], color=self.vis_params["color"])
+            artists.append(ax.add_patch(patch))
+
+        for i in (-0.5*self.vis_params["side_length"], 0.5*self.vis_params["side_length"]):
+            prop_center = se2[:2] + np.array([0.,i])
+            patch = Circle(prop_center, radius=self.vis_params["prop_radius"], color=self.vis_params["color"])
+            artists.append(ax.add_patch(patch))
+
+        return artists
 
     def add_vis3d(self, ax: Axes3D, s: torch.tensor) -> List[Artist]:
         artists = []
 
         # Draw body
-        body_center = self.get_pos3d(s.unsqueeze(0)).squeeze().numpy()
-        # Converting from NED Euler angles to NWU 
-        rot = R.from_euler("ZYX", ned_to_nwu(s[:6].unsqueeze(0)).squeeze()[3:].tolist())
-        body_dims = np.array([self.vis_params["side_length"], self.vis_params["side_length"], self.vis_params["height"]])
-        artists.extend(draw_box(ax, body_center, rot.as_quat(), body_dims, self.vis_params["color"]))
+        se3 = self.get_pose_se3(s.unsqueeze(0)).squeeze().numpy()
+        # Converting from NED Euler angles to NWU
+        rot = R.from_euler("ZYX", se3[3:].tolist())
+        body_dims = np.array([0.1*self.vis_params["side_length"], self.vis_params["side_length"], self.vis_params["height"]])
+        artists.extend(draw_box(ax, se3[:3], rot.as_quat(), body_dims, self.vis_params["color"]))
+        body_dims = np.array([self.vis_params["side_length"], 0.1*self.vis_params["side_length"], self.vis_params["height"]])
+        artists.extend(draw_box(ax, se3[:3], rot.as_quat(), body_dims, self.vis_params["color"]))
 
         # Draw propellers
         for i in (-0.5*self.vis_params["side_length"], 0.5*self.vis_params["side_length"]):
-            for j in (-0.5*self.vis_params["side_length"], 0.5*self.vis_params["side_length"]):
-                # Rotate about the center of the body, not the origin!
-                # prop_center = np.array([i, j, 0.5*self.vis_params["height"]])
-                prop_center = np.array([i, j, 0.5*(self.vis_params["height"] + self.vis_params["prop_height"])])
-                prop_center = rot.apply(prop_center)
-                prop_center += body_center
-                # Issues with transparent cylinder!
-                # prop_axis = rot.apply(np.array([0., 0., 1.]))
-                # prop_dims = np.array([self.vis_params["prop_height"], self.vis_params["prop_radius"]])
-                # artists.extend(draw_cylinder(ax, prop_center, prop_axis, prop_dims, self.vis_params["color"]))
-                prop_dims = np.array([2.0*self.vis_params["prop_radius"], 2.0*self.vis_params["prop_radius"], self.vis_params["prop_height"]])
-                artists.extend(draw_box(ax, prop_center, rot.as_quat(), prop_dims, self.vis_params["color"]))
+            # Rotate about the center of the body, not the origin!
+            # prop_center = np.array([i, 0., 0.5*self.vis_params["height"]])
+            prop_center = np.array([i, 0., 0.5*(self.vis_params["height"] + self.vis_params["prop_height"])])
+            prop_center = rot.apply(prop_center)
+            prop_center += se3[:3]
+            # Issues with transparent cylinder!
+            # prop_axis = rot.apply(np.array([0., 0., 1.]))
+            # prop_dims = np.array([self.vis_params["prop_height"], self.vis_params["prop_radius"]])
+            # artists.extend(draw_cylinder(ax, prop_center, prop_axis, prop_dims, self.vis_params["color"]))
+            prop_dims = np.array([2.0*self.vis_params["prop_radius"], 2.0*self.vis_params["prop_radius"], self.vis_params["prop_height"]])
+            artists.extend(draw_box(ax, prop_center, rot.as_quat(), prop_dims, self.vis_params["color"]))
+
+        for i in (-0.5*self.vis_params["side_length"], 0.5*self.vis_params["side_length"]):
+            # Rotate about the center of the body, not the origin!
+            # prop_center = np.array([i, 0., 0.5*self.vis_params["height"]])
+            prop_center = np.array([0., i, 0.5*(self.vis_params["height"] + self.vis_params["prop_height"])])
+            prop_center = rot.apply(prop_center)
+            prop_center += se3[:3]
+            # Issues with transparent cylinder!
+            # prop_axis = rot.apply(np.array([0., 0., 1.]))
+            # prop_dims = np.array([self.vis_params["prop_height"], self.vis_params["prop_radius"]])
+            # artists.extend(draw_cylinder(ax, prop_center, prop_axis, prop_dims, self.vis_params["color"]))
+            prop_dims = np.array([2.0*self.vis_params["prop_radius"], 2.0*self.vis_params["prop_radius"], self.vis_params["prop_height"]])
+            artists.extend(draw_box(ax, prop_center, rot.as_quat(), prop_dims, self.vis_params["color"]))
 
         return artists
