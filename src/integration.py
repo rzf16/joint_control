@@ -56,4 +56,3 @@ class TrapezoidalIntegrator(Integrator):
 
 
 # TODO: Make HermiteSimpsonIntegrator
-

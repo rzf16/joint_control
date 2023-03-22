@@ -21,9 +21,6 @@ from mpl_toolkits.mplot3d import Axes3D
 from src.utils import wrap_radians, ned_to_nwu, nwu_to_ned
 
 
-# TODO: change get_pos functions to get_pose
-
-
 # Class for describing a state or control variable
 @dataclass
 class VarDescription:

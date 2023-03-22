@@ -1,0 +1,13 @@
+---
+vehicles:
+  - type: "quadrotor"
+    name: "quad1"
+    m: 1.0
+    inertia: [0.3, 0.1, 0.5]
+    vis_params:
+      side_length: 0.5
+      height: 0.2
+      prop_radius: 0.1
+      prop_height: 0.1
+      color: "deepskyblue"
+    s0: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]

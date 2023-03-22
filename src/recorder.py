@@ -1,6 +1,9 @@
 '''
 Data recording and visualization
 '''
+import os
+import shutil
+import yaml
 from dataclasses import dataclass
 from typing import Optional, List, Tuple
 
@@ -14,6 +17,9 @@ from mpl_toolkits.mplot3d import Axes3D
 from src.vis_utils import equalize_axes3d
 
 from src.system import Vehicle
+
+
+DATA_PATH = "data/"
 
 
 # Class for a generic trajectory
@@ -54,6 +60,54 @@ class DataRecorder:
     def log_control(self, vehicle: Vehicle, u: torch.tensor, t: torch.tensor):
         self.data[vehicle.name].control_traj.data.extend(list(u))
         self.data[vehicle.name].control_traj.timestamps.extend(t.tolist())
+
+    # Writes recorded data to disk as NumPy arrays
+    # @input cfg_path [str]: path to configuration file
+    # @input vehicles [List[Vehicle]]: vehicles to write data for; None means write all vehicles
+    # @input prefix [str]: data directory prefix (e.g. "run" -> run1, run2, etc.)
+    def write_data(self, cfg_path: str, vehicles: Optional[List[Vehicle]] = None, prefix: str = "run"):
+        # Get the current run number and make the corresponding directory
+        idx = 1
+        write_dir = os.path.join(DATA_PATH, prefix+f"{idx:03}")
+        while os.path.exists(write_dir):
+            idx += 1
+            write_dir = os.path.join(DATA_PATH, prefix+f"{idx:03}")
+        os.makedirs(write_dir)
+
+        # Copy the configuration info
+        shutil.copy(cfg_path, os.path.join(write_dir, "cfg.yaml"))
+
+        # Write data as NumPy arrays
+        vehicle_names = [vehicle.name for vehicle in vehicles] if vehicles is not None else self.data.keys()
+        for vehicle_name in vehicle_names:
+            states, state_times = self.data[vehicle_name].state_traj.as_np()
+            controls, control_times = self.data[vehicle_name].state_traj.as_np()
+            np.save(os.path.join(write_dir, f"{vehicle_name}_states.npy"), states)
+            np.save(os.path.join(write_dir, f"{vehicle_name}_state_times.npy"), state_times)
+            np.save(os.path.join(write_dir, f"{vehicle_name}_controls.npy"), controls)
+            np.save(os.path.join(write_dir, f"{vehicle_name}_control_times.npy"), control_times)
+
+        print(f"[Recorder] Data written to {write_dir}!")
+
+    # Loads trajectory data from a directory
+    # @input dir [str]: directory to load from (EXCLUDING "data/")
+    def from_data(self, dir: str):
+        load_dir = os.path.join(DATA_PATH, dir)
+        cfg = yaml.safe_load(open(os.path.join(load_dir, "cfg.yaml")))
+        vehicle_names = [vehicle["name"] for vehicle in cfg["vehicles"]] # Is this robust? Maybe use substrings instead?
+
+        for vehicle_name in vehicle_names:
+            states = np.load(os.path.join(load_dir, f"{vehicle_name}_states.npy"))
+            state_times = np.load(os.path.join(load_dir, f"{vehicle_name}_state_times.npy"))
+            controls = np.load(os.path.join(load_dir, f"{vehicle_name}_controls.npy"))
+            control_times = np.load(os.path.join(load_dir, f"{vehicle_name}_control_times.npy"))
+
+            states = [torch.from_numpy(state) for state in states]
+            state_times = state_times.tolist()
+            controls = [torch.from_numpy(control) for control in controls]
+            control_times = control_times.tolist()
+
+            self.data[vehicle_name] = VehicleTrajectory(Trajectory(states, state_times), Trajectory(controls, control_times))
 
     # Plots the state trajectory of a vehicle
     # @input vehicle [Vehicle]: vehicle object
@@ -139,6 +193,7 @@ class DataRecorder:
     # @input write [Optional[str]]: filename to write the animation to; None indicates not to write
     def animate2d(self, vehicles: List[Vehicle], hold_traj: bool = True,
                   n_frames: Optional[int] = None, fps: int = 5, end_wait: float = 1.0, write: Optional[str] = None):
+        # TODO: move the legend off the plot
         fig = plt.figure()
         ax = plt.axes(aspect="equal")
 
