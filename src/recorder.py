@@ -17,7 +17,7 @@ from matplotlib.patches import Patch
 from mpl_toolkits.mplot3d import Axes3D
 from src.vis_utils import equalize_axes3d
 
-from src.system import Vehicle
+from src.vehicles import Vehicle
 
 
 DATA_PATH = "data/"

@@ -9,6 +9,8 @@ numpy
 scipy
 matplotlib
 torchdiffeq
+seaborn
+pyyaml
 ```
 All dependencies can be installed with `pip3 install <package>`.
 

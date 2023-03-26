@@ -18,6 +18,25 @@ vehicles:
       Q_diag: [1.0, 1.0, 0.5, 1.0]
       R_diag: [2.0, 0.5]
     mppi_sigma_diag: [1.5, 0.5]
+  
+  bike2:
+    type: "bicycle"
+    lf: 1.0
+    lr: 1.0
+    vis_params:
+      width: 1.0
+      length: 3.0
+      height: 1.0
+      wheel_radius: 0.25
+      wheel_width: 0.1
+      color: "deepskyblue"
+    s0: [0.0, 0.0, 0.0, 0.0]
+    objective: "goal"
+    cost_params:
+      goal: [10.0, -10.0, 0.0, 0.0]
+      Q_diag: [1.0, 1.0, 0.5, 1.0]
+      R_diag: [2.0, 0.5]
+    mppi_sigma_diag: [1.5, 0.5]
 
     # objective: "traj"
     # cost_params:
