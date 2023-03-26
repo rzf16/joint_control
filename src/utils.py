@@ -1,5 +1,6 @@
 '''
 Handy utility functions
+Author: rzfeng
 '''
 import torch
 

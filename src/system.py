@@ -127,6 +127,11 @@ class Vehicle(ABC):
     # @output [torch.tensor (N x state_dim)]: state trajectory
     def apply_control(self, u: torch.tensor, t_span: Tuple[float, float], t_eval: Optional[torch.tensor] = None) -> torch.tensor:
         state_traj, timestamps = self.integrate(self._state, u, t_span, t_eval)
+        # Wrap any angles
+        state_description = self.get_state_description()
+        for i in range(self.state_dim()):
+            if state_description[i].var_type == "circle":
+                state_traj[:,i] = wrap_radians(state_traj[:,i])
         self.set_state(state_traj[-1,:])
         return state_traj, timestamps
 

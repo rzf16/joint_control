@@ -1,5 +1,6 @@
 '''
 Data recording and visualization
+Author: rzfeng
 '''
 import os
 import shutil
@@ -20,6 +21,7 @@ from src.system import Vehicle
 
 
 DATA_PATH = "data/"
+MEDIA_DIR = "media/"
 
 
 # Class for a generic trajectory
@@ -92,10 +94,12 @@ class DataRecorder:
     # Loads trajectory data from a directory
     # @input dir [str]: directory to load from (EXCLUDING "data/")
     def from_data(self, dir: str):
+        # Grab vehicle names from the copied configuration
         load_dir = os.path.join(DATA_PATH, dir)
         cfg = yaml.safe_load(open(os.path.join(load_dir, "cfg.yaml")))
         vehicle_names = [vehicle["name"] for vehicle in cfg["vehicles"]] # Is this robust? Maybe use substrings instead?
 
+        # Load data from NumPy arrays
         for vehicle_name in vehicle_names:
             states = np.load(os.path.join(load_dir, f"{vehicle_name}_states.npy"))
             state_times = np.load(os.path.join(load_dir, f"{vehicle_name}_state_times.npy"))
@@ -190,7 +194,7 @@ class DataRecorder:
     # @input n_frames [Optional[int]]: number of frames to animate
     # @input fps [int]: frames per second
     # @input end_wait [float]: seconds to wait at the end before finishing the animation
-    # @input write [Optional[str]]: filename to write the animation to; None indicates not to write
+    # @input write [Optional[str]]: filename to write the animation to (EXCLUDING "media/""); None indicates not to write
     def animate2d(self, vehicles: List[Vehicle], hold_traj: bool = True,
                   n_frames: Optional[int] = None, fps: int = 5, end_wait: float = 1.0, write: Optional[str] = None):
         # TODO: move the legend off the plot
@@ -242,13 +246,18 @@ class DataRecorder:
         legend_patches = []
         for vehicle in vehicles:
             legend_patches.append(Patch(color=vehicle.vis_params["color"], label=vehicle.name))
-        ax.legend(handles=legend_patches, loc="right")
+        ax.legend(handles=legend_patches, loc="upper left")
         ax.set_title(f"2D trajectory animation")
         ax.set_xlabel("x")
         ax.set_ylabel("y")
 
         if write is not None:
-            anim.save(write)
+            write_path = os.path.join(MEDIA_DIR, write)
+            overwrite = True
+            if os.path.exists(write_path):
+                overwrite = input(f"[Recorder] Write path {write_path} exists. Overwrite? (y/n) ") == "y"
+            if overwrite:
+                anim.save(os.path.join(MEDIA_DIR, write))
 
         plt.show()
 
@@ -260,7 +269,7 @@ class DataRecorder:
     # @input fps [int]: frames per second
     # @input end_wait [float]: seconds to wait at the end before finishing the animation
     # @input camera_angle Optional[Tuple[float] (3)]: camera angle (elevation, azimuth, roll)
-    # @input write [Optional[str]]: filename to write the animation to; None indicates not to write
+    # @input write [Optional[str]]: filename to write the animation to (EXCLUDING "media/""); None indicates not to write
     def animate3d(self, vehicles: List[Vehicle], hold_traj: bool = True,
                   n_frames: Optional[int] = None, fps: int = 5, end_wait: float = 1.0, write: Optional[str] = None,
                   camera_angle: Optional[np.ndarray] = None):
@@ -325,6 +334,11 @@ class DataRecorder:
         ax.set_zlabel("z")
 
         if write is not None:
-            anim.save(write)
+            write_path = os.path.join(MEDIA_DIR, write)
+            overwrite = True
+            if os.path.exists(write_path):
+                overwrite = input(f"[Recorder] Write path {write_path} exists. Overwrite? (y/n) ") == "y"
+            if overwrite:
+                anim.save(os.path.join(MEDIA_DIR, write))
 
         plt.show()

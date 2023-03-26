@@ -1,13 +1,43 @@
 ---
 vehicles:
-  - type: "quadrotor"
-    name: "quad1"
-    m: 1.0
-    inertia: [0.3, 0.1, 0.5]
+  bike1:
+    type: "bicycle"
+    lf: 1.0
+    lr: 1.0
     vis_params:
-      side_length: 0.5
-      height: 0.2
-      prop_radius: 0.1
-      prop_height: 0.1
-      color: "deepskyblue"
-    s0: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+      width: 1.0
+      length: 3.0
+      height: 1.0
+      wheel_radius: 0.25
+      wheel_width: 0.1
+      color: "lime"
+    s0: [0.0, 0.0, 0.0, 0.0]
+    objective: "goal"
+    cost_params:
+      goal: [10.0, 10.0, 0.0, 0.0]
+      Q_diag: [1.0, 1.0, 0.5, 1.0]
+      R_diag: [2.0, 0.5]
+    mppi_sigma_diag: [1.5, 0.5]
+
+    # objective: "traj"
+    # cost_params:
+    #   traj: "bike1_traj.csv"
+
+  # - type: "quadrotor"
+  #   name: "quad1"
+  #   m: 1.0
+  #   inertia: [0.3, 0.1, 0.5]
+  #   vis_params:
+  #     side_length: 0.5
+  #     height: 0.2
+  #     prop_radius: 0.1
+  #     prop_height: 0.1
+  #     color: "deepskyblue"
+  #   s0: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+mppi_params:
+  dt: 0.1
+  horizon: 10
+  n_samples: 1000
+  lambda_: 0.01
+  warm_start_steps: 10
