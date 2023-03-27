@@ -34,8 +34,9 @@ def main():
     controller.warm_start(s, cfg["mppi_params"]["warm_start_steps"])
 
     # TODO: make goal test
+    # TODO: per-vehicle cost weights
     times = []
-    for i in range(150):
+    for i in range(100):
         t = i*cfg["mppi_params"]["dt"]
         tic = time.time()
         control = controller.get_command(s)
@@ -43,9 +44,12 @@ def main():
         times.append(toc - tic)
         system.apply_control(control.repeat(2,1), (t, t+cfg["mppi_params"]["dt"]))
         s = system.get_state()
+        # print(controller.cost)
 
     print(sum(times) / len(times))
     system.recorder.animate2d(list(system.vehicles.values()))
+    # system.recorder.plot_state_traj(system.vehicles["quad1"])
+    # system.recorder.plot_control_traj(system.vehicles["quad1"])
 
 
 # Extracts a dictionary of Vehicle objects and cost functions from the configuration
@@ -99,13 +103,13 @@ def extract_cfg_vehicles(cfg: Dict) -> VehicleSystem:
 
         if vehicle_info["objective"] == "goal":
             cost_fns[vehicle_name] = generate_goal_cost(torch.tensor(vehicle_info["cost_params"]["goal"]),
-                                                                torch.diag(torch.tensor(vehicle_info["cost_params"]["Q_diag"])),
-                                                                torch.diag(torch.tensor(vehicle_info["cost_params"]["R_diag"])))
+                                                        torch.diag(torch.tensor(vehicle_info["cost_params"]["Q_diag"])),
+                                                        torch.diag(torch.tensor(vehicle_info["cost_params"]["R_diag"])))
         elif vehicle_info["objective"] == "traj":
             cost_fns[vehicle_name] = generate_traj_cost(torch.from_numpy(np.genfromtxt(vehicle_info["cost_params"]["traj"],
-                                                                                               delimiter=",")),
-                                                                torch.diag(torch.tensor(vehicle_info["cost_params"]["Q_diag"])),
-                                                                torch.diag(torch.tensor(vehicle_info["cost_params"]["R_diag"])))
+                                                                                       delimiter=",", dtype=np.float32)),
+                                                        torch.diag(torch.tensor(vehicle_info["cost_params"]["Q_diag"])),
+                                                        torch.diag(torch.tensor(vehicle_info["cost_params"]["R_diag"])))
         else:
             print("[Main] Error! Unrecognized objective type.")
             exit()
@@ -160,13 +164,15 @@ def generate_traj_cost(ref: torch.tensor, Q: torch.tensor, R: torch.tensor) -> C
         T_ref = ref.size(0)
         state_dim = s.size(2)
         # control_dim = u.size(2)
-        batch_Q = Q.repeat(B*T,1,1)
-        # batch_R = R.repeat(B*T,1,1)
+
         # This assumes t is filled with the same element, but it's REALLY hard to get around this assumption without complex
         # logic to deal with the different length of each trajectory difference!
         ref_end = int(min(t[0] + T, T_ref))
-        T_diff = ref_end - t[0]
-        diffs = ref[t[0]:ref_end,:] - s[:T_diff]
+        T_diff = ref_end - int(t[0])
+        diffs = ref[int(t[0]):ref_end,:] - s[:,:T_diff,:]
+
+        batch_Q = Q.repeat(B*T_diff,1,1)
+        # batch_R = R.repeat(B*T_diff,1,1)
 
         cost = torch.bmm(diffs.reshape(B*T_diff,1,state_dim), torch.bmm(batch_Q, diffs.reshape(B*T_diff, state_dim, 1))).reshape(B,T_diff).sum(dim=1)
         # cost += torch.bmm(u.reshape(B*T_diff,1,control_dim), torch.bmm(batch_R, u.reshape(B*T_diff, control_dim, 1))).reshape(B,T_diff).sum(dim=1)

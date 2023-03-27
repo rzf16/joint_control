@@ -120,7 +120,7 @@ class VehicleSystem:
             vehicle_state_traj, timestamps = vehicle.apply_control(vehicle_u, t_span, t_eval)
             state_traj.append(vehicle_state_traj)
 
-            self.recorder.log_control(vehicle, vehicle_u.unsqueeze(0), torch.tensor([t_span[0]]))
+            self.recorder.log_control(vehicle, vehicle_u, t_span[0] * torch.ones(vehicle_u.size(0)))
             self.recorder.log_state(vehicle, vehicle_state_traj, timestamps)
 
         state_traj = torch.cat(state_traj, dim=1)

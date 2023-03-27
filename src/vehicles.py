@@ -142,7 +142,7 @@ class Vehicle(ABC):
             ds_t = self.continuous_dynamics(t.unsqueeze(0), s.unsqueeze(0), u_t.unsqueeze(0))
             return ds_t.squeeze(0)
 
-        sol = odeint(ode_dynamics, s0, t_eval)
+        sol = odeint(ode_dynamics, s0, t_eval, method="rk4") # Dopri5 was giving some issues with step size
         return sol, t_eval
 
     # Applies a control sequence to the system

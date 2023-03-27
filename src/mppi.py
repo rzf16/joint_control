@@ -107,8 +107,9 @@ class MPPI:
         # Modify nominal control trajectory
         self.U += (weights.reshape(-1,1,1) * perturbations).sum(dim=0)
 
-        # Get the predicted state trajectory from the nominal control trajectory
+        # Get the predicted state trajectory and cost from the nominal control trajectory
         self.X = self.dynamics(torch.tensor([self.time]), state.to(self.device).unsqueeze(0), self.U.unsqueeze(0)).squeeze(0)
+        self.cost = self.running_cost(torch.tensor([self.timesteps]), self.X.unsqueeze(0), self.U.unsqueeze(0)).squeeze()
 
         control = self.U[0,:]
         if shift > 0:
