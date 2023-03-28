@@ -3,7 +3,7 @@ Vehicle system combining multiple vehicles and data recording into one class
 Author: rzfeng
 '''
 from copy import deepcopy
-from typing import List, Dict, Callable, Tuple, Optional
+from typing import Dict, Callable, Tuple, Optional
 
 import torch
 
@@ -14,12 +14,18 @@ from src.integration import ExplicitEulerIntegrator
 
 class VehicleSystem:
     # @input vehicles [Dict[str, Vehicle]]: dictionary of vehicles
-    # @input cost_fns [Dict[str, function(torch.tensor(B), torch.tensor (B x T x state_dim), torch.tensor (B x T x control_dim)) -> torch.tensor (B)]]:
-    #       dictionary of vehicle cost functions
+    # @input running_costs [Dict[str, function(torch.tensor(B), torch.tensor (B x T x state_dim), torch.tensor (B x T x control_dim)) -> torch.tensor (B)]]:
+    #       dictionary of vehicle running cost functions
+    # @input terminal_costs [Dict[str, Optional[function(torch.tensor (B x T x state_dim)) -> torch.tensor (B)]]]:
+    #       dictionary of vehicle terminal cost functions
     # TODO: add joint cost functions
-    def __init__(self, vehicles: Dict[str, Vehicle], cost_fns: Dict[str, Callable[[torch.tensor, torch.tensor, torch.tensor], torch.tensor]]):
+    def __init__(self, vehicles: Dict[str, Vehicle],
+                       running_costs: Dict[str, Callable[[torch.tensor, torch.tensor, torch.tensor], torch.tensor]],
+                       terminal_costs: Dict[str, Optional[Callable[[torch.tensor], torch.tensor]]],
+                       ):
         self.vehicles = vehicles
-        self.cost_fns = cost_fns
+        self.running_costs = running_costs
+        self.terminal_costs = terminal_costs
         self.state = torch.cat([vehicle.get_state() for vehicle in self.vehicles.values()])
 
         self.state_idxs = {}
@@ -92,18 +98,30 @@ class VehicleSystem:
             # return state_traj
         return discrete_dynamics
 
-    # Joint cost function, computing the cost for a batch of state and control trajectories
+    # Joint running cost function, computing the cost for a batch of state and control trajectories
     # @input t [torch.tensor (B)]: batch of initial timesteps
     # @input s [torch.tensor (B x T x state_dim)]: batch of state trajectories
     # @input u [torch.tensor (B x T x control_dim)]: batch of control trajectories
     # @output [torch.tensor (B)]: batch of costs
-    def cost_fn(self, t: torch.tensor, s: torch.tensor, u: torch.tensor) -> torch.tensor:
+    def running_cost(self, t: torch.tensor, s: torch.tensor, u: torch.tensor) -> torch.tensor:
         B = t.size(0)
         cost = torch.zeros(B)
         for vehicle_name in self.vehicles.keys():
             # Add the cost for this vehicle
-            cost += self.cost_fns[vehicle_name](t, s[:,:,self.state_idxs[vehicle_name][0]:self.state_idxs[vehicle_name][1]],
-                                                u[:,:,self.control_idxs[vehicle_name][0]:self.control_idxs[vehicle_name][1]])
+            cost += self.running_costs[vehicle_name](t, s[:,:,self.state_idxs[vehicle_name][0]:self.state_idxs[vehicle_name][1]],
+                                                     u[:,:,self.control_idxs[vehicle_name][0]:self.control_idxs[vehicle_name][1]])
+        return cost
+
+    # Joint terminal cost function, computing the cost for a batch of states
+    # @input s [torch.tensor (B x T x state_dim)]: batch of state trajectories
+    # @output [torch.tensor (B)]: batch of costs
+    def terminal_cost(self, s: torch.tensor) -> torch.tensor:
+        B = s.size(0)
+        cost = torch.zeros(B)
+        for vehicle_name in self.vehicles.keys():
+            # Add the cost for this vehicle
+            if self.terminal_costs[vehicle_name] is not None:
+                cost += self.terminal_costs[vehicle_name](s[:,:,self.state_idxs[vehicle_name][0]:self.state_idxs[vehicle_name][1]])
         return cost
 
     # Applies a control sequence to the system

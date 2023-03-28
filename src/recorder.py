@@ -65,9 +65,12 @@ class DataRecorder:
 
     # Writes recorded data to disk as NumPy arrays
     # @input cfg_path [str]: path to configuration file
-    # @input vehicles [List[Vehicle]]: vehicles to write data for; None means write all vehicles
+    # @input vehicles [List[Vehicle]]: vehicles to write data for
     # @input prefix [str]: data directory prefix (e.g. "run" -> run1, run2, etc.)
-    def write_data(self, cfg_path: str, vehicles: Optional[List[Vehicle]] = None, prefix: str = "run"):
+    def write_data(self, cfg_path: str, vehicles: List[Vehicle], prefix: str = "run"):
+        if not vehicles:
+            return
+
         # Get the current run number and make the corresponding directory
         idx = 1
         write_dir = os.path.join(DATA_PATH, prefix+f"{idx:03}")
@@ -80,7 +83,7 @@ class DataRecorder:
         shutil.copy(cfg_path, os.path.join(write_dir, "cfg.yaml"))
 
         # Write data as NumPy arrays
-        vehicle_names = [vehicle.name for vehicle in vehicles] if vehicles is not None else self.data.keys()
+        vehicle_names = [vehicle.name for vehicle in vehicles]
         for vehicle_name in vehicle_names:
             states, state_times = self.data[vehicle_name].state_traj.as_np()
             controls, control_times = self.data[vehicle_name].state_traj.as_np()
@@ -154,6 +157,9 @@ class DataRecorder:
     # Plots the 2D xy trajectory of vehicles
     # @input vehicles [List[Vehicle]]: vehicles to visualize
     def plot_traj2d(self, vehicles: List[Vehicle]):
+        if not vehicles:
+            return
+
         plt.figure()
 
         for vehicle in vehicles:
@@ -170,6 +176,9 @@ class DataRecorder:
     # Plots the 3D trajectory of vehicles
     # @input vehicles [List[Vehicle]]: vehicles to visualize
     def plot_traj3d(self, vehicles: List[Vehicle]):
+        if not vehicles:
+            return
+
         fig = plt.figure()
         ax = Axes3D(fig, auto_add_to_figure=False, aspect="equal")
         fig.add_axes(ax)
@@ -197,6 +206,9 @@ class DataRecorder:
     # @input write [Optional[str]]: filename to write the animation to (EXCLUDING "media/""); None indicates not to write
     def animate2d(self, vehicles: List[Vehicle], hold_traj: bool = True,
                   n_frames: Optional[int] = None, fps: int = 5, end_wait: float = 1.0, write: Optional[str] = None):
+        if not vehicles:
+            return
+
         # TODO: move the legend off the plot
         fig = plt.figure()
         ax = plt.axes(aspect="equal")
@@ -273,6 +285,9 @@ class DataRecorder:
     def animate3d(self, vehicles: List[Vehicle], hold_traj: bool = True,
                   n_frames: Optional[int] = None, fps: int = 5, end_wait: float = 1.0, write: Optional[str] = None,
                   camera_angle: Optional[np.ndarray] = None):
+        if not vehicles:
+            return
+
         fig = plt.figure()
         ax = Axes3D(fig, auto_add_to_figure=False, aspect="equal")
         fig.add_axes(ax)

@@ -20,9 +20,9 @@ class MPPI:
     # @input horizon [int]: time horizon (in steps)
     # @input n_samples [int]: number of control trajectory samples to take
     # @input lambda_ [float]: temperature parameter for control exploration
-    # @input u_min [torch.tensor (state_dim)]: minimum control
-    # @input u_max [torch.tensor (state_dim)]: maximum control
-    # @input u0 [torch.tensor (T x state_dim)]: initial control trajectory
+    # @input u_min [torch.tensor (control_dim)]: minimum control
+    # @input u_max [torch.tensor (control_dim)]: maximum control
+    # @input u0 [torch.tensor (T x control_dim)]: initial control trajectory
     # @input terminal_cost [function(torch.tensor (K x T x state_dim)) -> torch.tensor (K)]:
     #       batched terminal cost function for state trajectories
     # @input device [str]: device to run on
@@ -61,6 +61,8 @@ class MPPI:
 
         self.X = None
         self.U = self.u0 if self.u0 is not None else self.noise_dist.sample((self.T,))
+        # In case only some of the controls have a u0!
+        self.U[torch.isnan(self.U)] = self.noise_dist.sample((self.T,))[torch.isnan(self.U)]
         self.cost = None
         self.time = 0.0
         self.timesteps = 0

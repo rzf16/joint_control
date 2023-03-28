@@ -1,6 +1,7 @@
 ---
 vehicles:
   bike1:
+    # Vehicle parameters
     type: "bicycle"
     lf: 1.0
     lr: 1.0
@@ -11,32 +12,59 @@ vehicles:
       wheel_radius: 0.25
       wheel_width: 0.1
       color: "lime"
+
+    # Task parameters
     s0: [0.0, 0.0, 0.0, 0.0]
-    objective: "traj"
-    cost_params:
-      traj: "bike1_traj.csv"
-      Q_diag: [1.0, 1.0, 1.0, 1.0]
+    objective:
+      type: "goal"
+      goal: [10.0, 10.0, 0.7854, 0.0]
+      tolerance: [0.1, 0.1, 0.3927, 0.1]
+      Q_diag: [1.0, 1.0, 2.5, 1.0]
       R_diag: [2.0, 0.5]
     mppi_sigma_diag: [1.5, 0.5]
-  
-  # bike2:
-  #   type: "bicycle"
-  #   lf: 1.0
-  #   lr: 1.0
-  #   vis_params:
-  #     width: 1.0
-  #     length: 3.0
-  #     height: 1.0
-  #     wheel_radius: 0.25
-  #     wheel_width: 0.1
-  #     color: "deepskyblue"
-  #   s0: [0.0, 0.0, 0.0, 0.0]
-  #   objective: "goal"
-  #   cost_params:
-  #     goal: [10.0, -10.0, 0.0, 0.0]
-  #     Q_diag: [1.0, 1.0, 0.5, 1.0]
-  #     R_diag: [2.0, 0.5]
-  #   mppi_sigma_diag: [1.5, 0.5]
+    cost_weight: 1.0
+
+    # Data recording/visualization flags
+    write_data: False
+    plot_state: False
+    plot_control: False
+    plot_traj2d: False
+    plot_traj3d: False
+    animate2d: True
+    animate3d: False
+
+  bike2:
+    # Vehicle parameters
+    type: "bicycle"
+    lf: 1.0
+    lr: 1.0
+    vis_params:
+      width: 1.0
+      length: 3.0
+      height: 1.0
+      wheel_radius: 0.25
+      wheel_width: 0.1
+      color: "deepskyblue"
+
+    # Task parameters
+    s0: [0.0, 0.0, 0.0, 0.0]
+    objective:
+      type: "goal"
+      goal: [10.0, -10.0, -0.7854, 0.0]
+      tolerance: [0.1, 0.1, 0.3927, 0.1]
+      Q_diag: [1.0, 1.0, 2.5, 1.0]
+      R_diag: [2.0, 0.5]
+    mppi_sigma_diag: [1.5, 0.5]
+    cost_weight: 1.0
+
+    # Data recording/visualization flags
+    write_data: False
+    plot_state: False
+    plot_control: False
+    plot_traj2d: False
+    plot_traj3d: False
+    animate2d: True
+    animate3d: False
 
   # quad1:
   #   type: "quadrotor"
@@ -49,16 +77,31 @@ vehicles:
   #     prop_height: 0.1
   #     color: "deepskyblue"
   #   s0: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-  #   objective: "goal"
-  #   cost_params:
+  #   objective:
+  #     type: "goal"
   #     goal: [10.0, -10.0, -10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
   #     Q_diag: [1.0, 1.0, 1.0, 10.0, 10.0, 10.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
   #     R_diag: [1.0, 1.0, 1.0, 1.0]
   #   mppi_sigma_diag: [5.0, 0.5, 0.5, 0.5]
 
-mppi_params:
+mppi:
   dt: 0.1
   horizon: 10
   n_samples: 1000
   lambda_: 0.01
   warm_start_steps: 10
+  max_steps: 250
+
+animation:
+  2d:
+    filename: ""
+    hold_traj: True
+    n_frames: -1
+    fps: 5
+    end_wait: 1.0
+  3d:
+    filename: ""
+    hold_traj: True
+    n_frames: -1
+    fps: 5
+    end_wait: 1.0
