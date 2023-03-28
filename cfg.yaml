@@ -1,4 +1,5 @@
 ---
+# System information
 vehicles:
   bike1:
     # Vehicle parameters
@@ -16,15 +17,17 @@ vehicles:
     # Task parameters
     s0: [0.0, 0.0, 0.0, 0.0]
     objective:
-      # type: "goal"
-      # goal: [10.0, 10.0, 0.7854, 0.0]
-      type: "traj"
-      traj: "bike1_traj.csv"
-      tolerance: [0.5, 0.5, 0.3927, 0.1]
-      Q_diag: [1.0, 1.0, 2.5, 1.0]
+      type: "goal"
+      goal: [10.0, 10.0, 0.7854, 0.0]
+      # type: "traj"
+      # traj: "bike1_traj.csv"
+      tolerance: [0.5, 0.5, 3.1416, 0.1]
+      Q_diag: [1.0, 1.0, 0.1, 1.0]
       R_diag: [2.0, 0.5]
     mppi_sigma_diag: [1.5, 0.5]
     cost_weight: 1.0
+    collision_radius: 1.5
+    collision_height: 0.0
 
     # Data recording/visualization flags
     write_data: False
@@ -32,7 +35,7 @@ vehicles:
     plot_control: False
     plot_traj2d: False
     plot_traj3d: False
-    animate2d: False
+    animate2d: True
     animate3d: False
 
   bike2:
@@ -53,11 +56,13 @@ vehicles:
     objective:
       type: "goal"
       goal: [10.0, -10.0, -0.7854, 0.0]
-      tolerance: [0.1, 0.1, 0.3927, 0.1]
-      Q_diag: [1.0, 1.0, 2.5, 1.0]
+      tolerance: [0.1, 0.1, 3.1416, 0.1]
+      Q_diag: [1.0, 1.0, 0.1, 1.0]
       R_diag: [2.0, 0.5]
     mppi_sigma_diag: [1.5, 0.5]
     cost_weight: 1.0
+    collision_radius: 1.5
+    collision_height: 0.0
 
     # Data recording/visualization flags
     write_data: False
@@ -65,7 +70,7 @@ vehicles:
     plot_control: False
     plot_traj2d: False
     plot_traj3d: False
-    animate2d: False
+    animate2d: True
     animate3d: False
 
   # quad1:
@@ -86,6 +91,13 @@ vehicles:
   #     R_diag: [1.0, 1.0, 1.0, 1.0]
   #   mppi_sigma_diag: [5.0, 0.5, 0.5, 0.5]
 
+# Cylindrical obstacles
+obstacles:
+  - center: [5.0, 5.0]
+    radius: 1.0
+    height: 2.0
+
+# MPPI parameters
 mppi:
   dt: 0.1
   horizon: 10
@@ -93,7 +105,9 @@ mppi:
   lambda_: 0.01
   warm_start_steps: 10
   max_steps: 250
+  collision_cost: 100000
 
+# Animation parameters
 animation:
   2d:
     filename: ""

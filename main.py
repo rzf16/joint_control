@@ -12,7 +12,7 @@ import numpy as np
 import seaborn
 seaborn.set()
 
-from src.vehicles import Unicycle, Bicycle, Quadrotor, LinearizedQuadrotor
+from src.vehicles import Vehicle, Unicycle, Bicycle, Quadrotor, LinearizedQuadrotor
 from src.system import VehicleSystem
 from src.mppi import MPPI
 
@@ -88,18 +88,22 @@ def main():
         if cfg["vehicles"][vehicle_name]["plot_control"]:
             system.recorder.plot_control_traj(system.vehicles[vehicle_name])
 
+    obstacles = [(*obs["center"], obs["radius"], obs["height"]) for obs in cfg["obstacles"]]
+
     system.recorder.plot_traj2d([vehicle for vehicle in system.vehicles.values()
-                                 if cfg["vehicles"][vehicle.name]["plot_traj2d"]])
+                                 if cfg["vehicles"][vehicle.name]["plot_traj2d"]],
+                                obstacles=obstacles)
     system.recorder.plot_traj3d([vehicle for vehicle in system.vehicles.values()
                                  if cfg["vehicles"][vehicle.name]["plot_traj3d"]])
 
     system.recorder.animate2d([vehicle for vehicle in system.vehicles.values()
                                if cfg["vehicles"][vehicle.name]["animate2d"]],
-                               hold_traj=cfg["animation"]["2d"]["hold_traj"],
-                               n_frames=cfg["animation"]["2d"]["n_frames"] if cfg["animation"]["3d"]["n_frames"] > 0 else None,
-                               fps=cfg["animation"]["2d"]["fps"],
-                               end_wait=cfg["animation"]["2d"]["end_wait"],
-                               write=cfg["animation"]["2d"]["filename"] if cfg["animation"]["3d"]["filename"] else None)
+                              obstacles=obstacles,
+                              hold_traj=cfg["animation"]["2d"]["hold_traj"],
+                              n_frames=cfg["animation"]["2d"]["n_frames"] if cfg["animation"]["3d"]["n_frames"] > 0 else None,
+                              fps=cfg["animation"]["2d"]["fps"],
+                              end_wait=cfg["animation"]["2d"]["end_wait"],
+                              write=cfg["animation"]["2d"]["filename"] if cfg["animation"]["3d"]["filename"] else None)
     system.recorder.animate3d([vehicle for vehicle in system.vehicles.values()
                                if cfg["vehicles"][vehicle.name]["animate3d"]],
                                hold_traj=cfg["animation"]["3d"]["hold_traj"],
@@ -113,6 +117,8 @@ def main():
 # @input cfg [Dict]: configuration
 # @output [VehicleSystem]: VehicleSystem object
 def extract_vehicles(cfg: Dict) -> VehicleSystem:
+    obstacles = torch.stack([torch.tensor([*obs["center"], obs["radius"], obs["height"]]) for obs in cfg["obstacles"]])
+
     vehicles = {}
     running_costs = {}
     terminal_costs = {}
@@ -176,8 +182,11 @@ def extract_vehicles(cfg: Dict) -> VehicleSystem:
             print("[Main] Error! Unrecognized objective type.")
             exit()
 
-        # TODO: make obstacle avoidance function here! Potentially with a Jacobian on get_pos3d???
-        terminal_costs[vehicle_name] = None
+        terminal_costs[vehicle_name] = generate_collision_cost(vehicles[vehicle_name],
+                                                               obstacles,
+                                                               vehicle_info["collision_radius"],
+                                                               vehicle_info["collision_height"],
+                                                               cfg["mppi"]["collision_cost"])
 
     return VehicleSystem(vehicles, running_costs, terminal_costs)
 
@@ -237,7 +246,7 @@ def generate_goal_cost(goal: torch.tensor, Q: torch.tensor, R: torch.tensor) -> 
 
 
 # Generates an MPPI cost function for a trajectory-tracking objective
-# @input ref [torch.tensor (T_ref x state_dim)]: reference trajectory
+# @input ref [torch.tensor (T_ref x state_dim)]: reference trajectory WITH THE SAME TIME DISCRETIZATION AS THE CONTROLLER
 # @input Q [torch.tensor (state_dim x state_dim)]: state weight matrix
 # @input R [torch.tensor (control_dim x control_dim)]: control weight matrix
 # output [function(torch.tensor(B), torch.tensor (B x T x state_dim), torch.tensor (B x T x control_dim)) -> torch.tensor (B)]:
@@ -273,8 +282,39 @@ def generate_traj_cost(ref: torch.tensor, Q: torch.tensor, R: torch.tensor) -> C
     return quad_traj_cost
 
 
-# Generates an MPPI terminal cost function for avoidance of cylindrical obstacles
-# TODO
+# Generates an MPPI terminal cost function for avoidance of cylindrical obstacles and of the ground
+# @input vehicle [Vehicle]: Vehicle object
+# @input obstacles [torch.tensor (N x 4)]: obstacles specified in the form (x, y, radius, height)
+# @input collision_radius [float]: effective collision radius for the vehicle (cylinder approximation)
+# @input collision_height [float]: effective collision height for the vehicle (cylinder approximation)
+# @input collision_cost [float]: cost of a collision on the trajectory
+# @output [function(torch.tensor (B x T x state_dim)) -> torch.tensor (B)]: function computing collision costs for a batch of
+#       state trajectories
+def generate_collision_cost(vehicle: Vehicle, obstacles: torch.tensor,
+                            collision_radius: float, collision_height: float, collision_cost: float = 1e6):
+    # MPPI collision terminal cost function
+    # @input s [torch.tensor (B x T x state_dim)]: batch of state trajectories
+    # @output [torch.tensor (B)]: batch of collision costs
+    def terminal_collision_cost(s: torch.tensor):
+        B = s.size(0)
+        T = s.size(1)
+        state_dim = s.size(2)
+        N = obstacles.size(0)
+        pos = vehicle.get_pos3d(s.reshape(B*T, state_dim)).reshape(B, T, 3)
+
+        # Check for ground collision
+        ground_collision = torch.any(pos[:,:,2] - 0.5*collision_height < 0.0, dim=1)
+
+        # Check for obstacle collisions
+        batch_pos = pos.repeat(N,1,1,1)
+        obstacle_collision = torch.any(torch.logical_and(
+            torch.any(batch_pos[:,:,:,2] - 0.5*collision_height < obstacles[:,3], dim=2),
+            torch.any(torch.linalg.norm(batch_pos[:,:,:,:2] - obstacles[:,:2].reshape(N,1,1,2), dim=3) < \
+                      (collision_radius + obstacles[:,2]), dim=2)
+        ).transpose(0,1), dim=1)
+
+        return collision_cost * torch.logical_or(ground_collision, obstacle_collision).float()
+    return terminal_collision_cost
 
 
 if __name__ == "__main__":

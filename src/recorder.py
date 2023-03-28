@@ -13,7 +13,7 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from matplotlib.patches import Patch
+from matplotlib.patches import Patch, Circle
 from mpl_toolkits.mplot3d import Axes3D
 from src.vis_utils import equalize_axes3d
 
@@ -156,7 +156,8 @@ class DataRecorder:
 
     # Plots the 2D xy trajectory of vehicles
     # @input vehicles [List[Vehicle]]: vehicles to visualize
-    def plot_traj2d(self, vehicles: List[Vehicle]):
+    # @input obstacles [List[Tuple[float]]]: cylindrical obstacles (x, y, radius, height)
+    def plot_traj2d(self, vehicles: List[Vehicle], obstacles: List[Tuple[float]] = []):
         if not vehicles:
             return
 
@@ -166,6 +167,9 @@ class DataRecorder:
             states, times = self.data[vehicle.name].state_traj.as_np()
             pts = vehicle.get_pos2d(torch.from_numpy(states)).numpy()
             plt.plot(pts[:,0], pts[:,1], label=vehicle.name, color=vehicle.vis_params["color"])
+
+        for obs in obstacles:
+            plt.Circle(obs[:2], obs[2], color='k')
 
         plt.title(f"2D trajectories")
         plt.xlabel("x")
@@ -188,6 +192,8 @@ class DataRecorder:
             pts = vehicle.get_pos3d(torch.from_numpy(states)).numpy()
             ax.plot(pts[:,0], pts[:,1], pts[:,2], label=vehicle.name, color=vehicle.vis_params["color"])
 
+        # TODO: draw obstacles
+
         equalize_axes3d(ax)
         ax.set_title(f"3D trajectories")
         ax.set_xlabel("x")
@@ -199,12 +205,13 @@ class DataRecorder:
 
     # Animates the 2D trajectory of vehicles
     # @input vehicles [List[Vehicle]]: vehicles to animate
+    # @input obstacles [List[Tuple[float]]]: cylindrical obstacles (x, y, radius, height)
     # @input hold_traj [bool]: maintain a line representing the 2D position trajectory
     # @input n_frames [Optional[int]]: number of frames to animate
     # @input fps [int]: frames per second
     # @input end_wait [float]: seconds to wait at the end before finishing the animation
     # @input write [Optional[str]]: filename to write the animation to (EXCLUDING "media/""); None indicates not to write
-    def animate2d(self, vehicles: List[Vehicle], hold_traj: bool = True,
+    def animate2d(self, vehicles: List[Vehicle], obstacles: List[Tuple[float]] = [], hold_traj: bool = True,
                   n_frames: Optional[int] = None, fps: int = 5, end_wait: float = 1.0, write: Optional[str] = None):
         if not vehicles:
             return
@@ -227,6 +234,9 @@ class DataRecorder:
         ax.set_xlim(lims[0])
         ax.set_ylim(lims[1])
         ax.autoscale(False)
+
+        for obs in obstacles:
+            ax.add_patch(Circle(obs[:2], obs[2], color='k'))
 
         traj_lines = [ax.plot([],[], color=vehicle.vis_params["color"])[0] for vehicle in vehicles] if hold_traj else []
         vehicle_drawings = [[] for vehicle in vehicles]
@@ -310,6 +320,8 @@ class DataRecorder:
         ax.autoscale(False)
         if camera_angle is not None:
             ax.view_init(elev=camera_angle[0], azim=camera_angle[1], roll=camera_angle[2])
+
+        # TODO: draw obstacles
 
         traj_lines = [ax.plot([],[],[], color=vehicle.vis_params["color"])[0] for vehicle in vehicles] if hold_traj else []
         vehicle_drawings = [[] for vehicle in vehicles]
