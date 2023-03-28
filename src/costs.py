@@ -2,7 +2,7 @@
 Cost function generation functions
 Author: rzfeng
 '''
-from typing import Callable, Dict
+from typing import Callable, List
 
 import torch
 
@@ -74,14 +74,13 @@ def generate_traj_cost(ref: torch.tensor, Q: torch.tensor, R: torch.tensor) -> C
     return quad_traj_cost
 
 
-# TODO: put collision checking in vehicles?
 # Generates an MPPI terminal cost function for avoidance of cylindrical obstacles and of the ground
 # @input vehicle [Vehicle]: Vehicle object
 # @input obstacles [torch.tensor (N x 4)]: obstacles specified in the form (x, y, radius, height)
-# @input collision_cost [float]: cost of a collision on the trajectory
+# @input cost [float]: cost of a collision on the trajectory
 # @output [function(torch.tensor (B x T x state_dim)) -> torch.tensor (B)]: function computing collision costs for a batch of
 #       state trajectories
-def generate_obstacle_cost(vehicle: Vehicle, obstacles: torch.tensor, collision_cost: float):
+def generate_obstacle_cost(vehicle: Vehicle, obstacles: torch.tensor, cost: float) -> Callable[[torch.tensor], torch.tensor]:
     # MPPI collision terminal cost function
     # @input s [torch.tensor (B x T x state_dim)]: batch of state trajectories
     # @output [torch.tensor (B)]: batch of collision costs
@@ -103,20 +102,20 @@ def generate_obstacle_cost(vehicle: Vehicle, obstacles: torch.tensor, collision_
                       (vehicle.radius + obstacles[:,2]), dim=2)
         ).transpose(0,1), dim=1)
 
-        return collision_cost * torch.logical_or(ground_collision, obstacle_collision).float()
+        return cost * torch.logical_or(ground_collision, obstacle_collision).float()
     return obstacle_cost
 
 
 # Generates an MPPI terminal cost function for self-collision avoidance within the system
 # @input system [VehicleSystem]: the system
-# @input collision_cost [float]: cost of a collision on the trajectory
+# @input cost [float]: cost of a collision on the trajectory
 # @output [function(torch.tensor (B x T x state_dim)) -> torch.tensor (B)]: function computing collision costs for a batch of
 #       state trajectories
-def generate_collision_cost(system: VehicleSystem, collision_cost: float):
+def generate_collision_cost(system: VehicleSystem, cost: float) -> Callable[[torch.tensor], torch.tensor]:
     # MPPI self-collision terminal cost function
     # @input s [torch.tensor (B x T x state_dim)]: batch of state trajectories
     # @output [torch.tensor (B)]: batch of collision costs
-    def collision_cost_fn(s: torch.tensor) -> torch.tensor:
+    def collision_cost(s: torch.tensor) -> torch.tensor:
         B = s.size(0)
         T = s.size(1)
         collision = torch.zeros(B, dtype=torch.bool)
@@ -139,5 +138,34 @@ def generate_collision_cost(system: VehicleSystem, collision_cost: float):
                     torch.linalg.norm(pos1[:,:,:2] - pos2[:,:,:2], dim=2) < vehicle1.radius + vehicle2.radius
                 )
                 collision = torch.logical_or(collision, torch.any(pair_collision, dim=1))
-        return collision_cost * collision.float()
-    return collision_cost_fn
+        return cost * collision.float()
+    return collision_cost
+
+
+# Generates an MPPI terminal cost function for maximum distance within the system
+# @input system [VehicleSystem]: the system
+# @input ego [str]: target vehicle 
+# @input targets [List[str]]: reference vehicles, one of which the ego vehicle aims to be within the maximal distance of
+# @Input dist [float]: maximal distance
+# @input cost [float]: cost of exceeding the maximal distance
+# @output [function(torch.tensor (B x T x state_dim)) -> torch.tensor (B)]: function computing distance costs for a batch of
+#       state trajectories
+def generate_distance_cost(system: VehicleSystem, ego: str, targets: List[str], dist: float, cost: float) -> Callable[[torch.tensor], torch.tensor]:
+    # MPPI maximal distance terminal cost function
+    # @input s [torch.tensor (B x T x state_dim)]: batch of state trajectories
+    # @output [torch.tensor (B)]: batch of distance costs
+    def distance_cost(s: torch.tensor) -> torch.tensor:
+        B = s.size(0)
+        T = s.size(1)
+        within_dist = torch.zeros((B,T), dtype=torch.bool)
+        # There's probably a way to vectorize this, but not sure if it's worth the effort/complexity
+        for target in targets:
+            s1 = s[:,:,system.state_idxs[ego][0]:system.state_idxs[ego][1]]
+            s2 = s[:,:,system.state_idxs[target][0]:system.state_idxs[target][1]]
+            pos1 = system.vehicles[ego].get_pos3d(s1.reshape(B*T, system.vehicles[ego].state_dim())).reshape(B, T, 3)
+            pos2 = system.vehicles[target].get_pos3d(s2.reshape(B*T, system.vehicles[target].state_dim())).reshape(B, T, 3)
+
+            pair_in_dist = torch.linalg.norm(pos1 - pos2, dim=2) <= dist
+            within_dist = torch.logical_or(within_dist, pair_in_dist)
+        return cost * torch.any(torch.logical_not(within_dist), dim=1).float()
+    return distance_cost

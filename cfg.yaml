@@ -107,6 +107,15 @@ mppi:
   max_steps: 250
   collision_cost: 100000
 
+# Joint costs
+joint_costs:
+  - running: False
+    type: "distance"
+    ego: "bike1"
+    targets: ["bike2"]
+    dist: 50.0
+    cost: 100000
+
 # Animation parameters
 animation:
   2d:

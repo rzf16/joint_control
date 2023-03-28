@@ -16,7 +16,7 @@ from src.vehicles import Unicycle, Bicycle, Quadrotor, LinearizedQuadrotor
 from src.system import VehicleSystem
 from src.mppi import MPPI
 from src.costs import generate_goal_cost, generate_traj_cost, \
-                      generate_obstacle_cost, generate_collision_cost
+                      generate_obstacle_cost, generate_collision_cost, generate_distance_cost
 
 
 CFG_PATH = "cfg.yaml"
@@ -204,7 +204,18 @@ def extract_vehicles(cfg: Dict) -> VehicleSystem:
 
     joint_running_costs = []
     joint_terminal_costs = [generate_collision_cost(system, cfg["mppi"]["collision_cost"])]
-    # TODO: read in costs from cfg
+    for joint_cost in cfg["joint_costs"]:
+        if joint_cost["running"]:
+            pass
+        else:
+            if joint_cost["type"] == "distance":
+                joint_terminal_costs.append(generate_distance_cost(system, joint_cost["ego"],
+                                                                   joint_cost["targets"], joint_cost["dist"], joint_cost["cost"]))
+            else:
+                print("[Main] Error! Unrecognized joint cost type.")
+                exit()
+
+    system.joint_running_costs.extend(joint_running_costs)
     system.joint_terminal_costs.extend(joint_terminal_costs)
 
     return system
