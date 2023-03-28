@@ -260,7 +260,9 @@ def generate_traj_cost(ref: torch.tensor, Q: torch.tensor, R: torch.tensor) -> C
         # logic to deal with the different length of each trajectory difference!
         ref_end = int(min(t[0] + T, T_ref))
         T_diff = ref_end - int(t[0])
-        diffs = ref[int(t[0]):ref_end,:] - s[:,:T_diff,:]
+        # Turns into a goal cost if we have passed the time horizon of the trajectory!
+        diffs = ref[int(t[0]):ref_end,:] - s[:,:T_diff,:] if T_diff > 0 else ref[-1,:] - s
+        T_diff = T if T_diff <= 0 else T_diff
 
         batch_Q = Q.repeat(B*T_diff,1,1)
         # batch_R = R.repeat(B*T_diff,1,1)

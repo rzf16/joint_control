@@ -16,9 +16,11 @@ vehicles:
     # Task parameters
     s0: [0.0, 0.0, 0.0, 0.0]
     objective:
-      type: "goal"
-      goal: [10.0, 10.0, 0.7854, 0.0]
-      tolerance: [0.1, 0.1, 0.3927, 0.1]
+      # type: "goal"
+      # goal: [10.0, 10.0, 0.7854, 0.0]
+      type: "traj"
+      traj: "bike1_traj.csv"
+      tolerance: [0.5, 0.5, 0.3927, 0.1]
       Q_diag: [1.0, 1.0, 2.5, 1.0]
       R_diag: [2.0, 0.5]
     mppi_sigma_diag: [1.5, 0.5]
@@ -30,7 +32,7 @@ vehicles:
     plot_control: False
     plot_traj2d: False
     plot_traj3d: False
-    animate2d: True
+    animate2d: False
     animate3d: False
 
   bike2:
@@ -63,7 +65,7 @@ vehicles:
     plot_control: False
     plot_traj2d: False
     plot_traj3d: False
-    animate2d: True
+    animate2d: False
     animate3d: False
 
   # quad1:
