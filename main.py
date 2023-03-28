@@ -12,9 +12,11 @@ import numpy as np
 import seaborn
 seaborn.set()
 
-from src.vehicles import Vehicle, Unicycle, Bicycle, Quadrotor, LinearizedQuadrotor
+from src.vehicles import Unicycle, Bicycle, Quadrotor, LinearizedQuadrotor
 from src.system import VehicleSystem
 from src.mppi import MPPI
+from src.costs import generate_goal_cost, generate_traj_cost, \
+                      generate_obstacle_cost, generate_collision_cost
 
 
 CFG_PATH = "cfg.yaml"
@@ -125,42 +127,54 @@ def extract_vehicles(cfg: Dict) -> VehicleSystem:
     for vehicle_name, vehicle_info in cfg["vehicles"].items():
         if vehicle_info["type"] == "unicycle":
             vehicles[vehicle_name] = Unicycle(vehicle_name,
-                                              vehicle_info["vis_params"],
-                                              torch.tensor(vehicle_info["s0"]))
+                                              torch.tensor(vehicle_info["s0"]),
+                                              vehicle_info["collision_radius"],
+                                              vehicle_info["collision_height"],
+                                              vehicle_info["vis_params"])
         elif vehicle_info["type"] == "bicycle":
             vehicles[vehicle_name] = Bicycle(vehicle_name,
+                                             torch.tensor(vehicle_info["s0"]),
+                                             vehicle_info["collision_radius"],
+                                             vehicle_info["collision_height"],
                                              vehicle_info["lf"],
                                              vehicle_info["lr"],
-                                             vehicle_info["vis_params"],
-                                             torch.tensor(vehicle_info["s0"]))
+                                             vehicle_info["vis_params"])
         elif vehicle_info["type"] == "quadrotor":
             if "g" in vehicle_info.keys():
                 vehicles[vehicle_name] = Quadrotor(vehicle_name,
+                                                   torch.tensor(vehicle_info["s0"]),
+                                                   vehicle_info["collision_radius"],
+                                                   vehicle_info["collision_height"],
                                                    vehicle_info["m"],
                                                    torch.tensor(vehicle_info["inertia"]),
                                                    vehicle_info["vis_params"],
-                                                   torch.tensor(vehicle_info["s0"]),
                                                    g=vehicle_info["g"])
             else:
                 vehicles[vehicle_name] = Quadrotor(vehicle_name,
+                                                   torch.tensor(vehicle_info["s0"]),
+                                                   vehicle_info["collision_radius"],
+                                                   vehicle_info["collision_height"],
                                                    vehicle_info["m"],
                                                    torch.tensor(vehicle_info["inertia"]),
-                                                   vehicle_info["vis_params"],
-                                                   torch.tensor(vehicle_info["s0"]))
+                                                   vehicle_info["vis_params"])
         elif vehicle_info["type"] == "linearized_quadrotor":
             if "g" in vehicle_info.keys():
                 vehicles[vehicle_name] = LinearizedQuadrotor(vehicle_name,
+                                                             torch.tensor(vehicle_info["s0"]),
+                                                             vehicle_info["collision_radius"],
+                                                             vehicle_info["collision_height"],
                                                              vehicle_info["m"],
                                                              torch.tensor(vehicle_info["inertia"]),
                                                              vehicle_info["vis_params"],
-                                                             torch.tensor(vehicle_info["s0"]),
                                                              g=vehicle_info["g"])
             else:
                 vehicles[vehicle_name] = LinearizedQuadrotor(vehicle_name,
+                                                             torch.tensor(vehicle_info["s0"]),
+                                                             vehicle_info["collision_radius"],
+                                                             vehicle_info["collision_height"],
                                                              vehicle_info["m"],
                                                              torch.tensor(vehicle_info["inertia"]),
-                                                             vehicle_info["vis_params"],
-                                                             torch.tensor(vehicle_info["s0"]))
+                                                             vehicle_info["vis_params"])
         else:
             print("[Main] Error! Unrecognized vehicle type.")
             exit()
@@ -182,13 +196,18 @@ def extract_vehicles(cfg: Dict) -> VehicleSystem:
             print("[Main] Error! Unrecognized objective type.")
             exit()
 
-        terminal_costs[vehicle_name] = generate_collision_cost(vehicles[vehicle_name],
-                                                               obstacles,
-                                                               vehicle_info["collision_radius"],
-                                                               vehicle_info["collision_height"],
-                                                               cfg["mppi"]["collision_cost"])
+        terminal_costs[vehicle_name] = generate_obstacle_cost(vehicles[vehicle_name],
+                                                              obstacles,
+                                                              cfg["mppi"]["collision_cost"])
 
-    return VehicleSystem(vehicles, running_costs, terminal_costs)
+    system = VehicleSystem(vehicles, running_costs, terminal_costs, [], [])
+
+    joint_running_costs = []
+    joint_terminal_costs = [generate_collision_cost(system, cfg["mppi"]["collision_cost"])]
+    # TODO: read in costs from cfg
+    system.joint_terminal_costs.extend(joint_terminal_costs)
+
+    return system
 
 # Extracts the goal and a goal test function from the configuration
 # @input cfg [Dict]: configuration
@@ -215,106 +234,6 @@ def extract_goal(cfg: Dict) -> Tuple[torch.tensor, Callable[[torch.tensor], torc
         return torch.all(torch.abs(goal_state - s) < tolerance, dim=1)
 
     return goal_state, goal_test
-
-
-# Generates an MPPI cost function for a goal-reaching objective
-# @input goal [torch.tensor (state_dim)]: goal state
-# @input Q [torch.tensor (state_dim x state_dim)]: state weight matrix
-# @input R [torch.tensor (control_dim x control_dim)]: control weight matrix
-# output [function(torch.tensor (B), torch.tensor (B x T x state_dim), torch.tensor (B x T x control_dim)) -> torch.tensor (B)]:
-#       MPPI cost function
-def generate_goal_cost(goal: torch.tensor, Q: torch.tensor, R: torch.tensor) -> Callable[[torch.tensor, torch.tensor, torch.tensor], torch.tensor]:
-    # Goal-reaching cost function for MPPI, computing the cost for a batch of state and control trajectories
-    # @input t [torch.tensor (B)]: batch of initial timesteps
-    # @input s [torch.tensor (B x T x state_dim)]: batch of state trajectories
-    # @input u [torch.tensor (B x T x control_dim)]: batch of control trajectories
-    # @output [torch.tensor (B)]: batch of costs
-    def quad_goal_cost(t: torch.tensor, s: torch.tensor, u: torch.tensor) -> torch.tensor:
-        # Not using any control cost for now, since MPPI has its own control cost formula!
-        B = s.size(0)
-        T = s.size(1)
-        state_dim = s.size(2)
-        # control_dim = u.size(2)
-        batch_Q = Q.repeat(B*T,1,1)
-        # batch_R = R.repeat(B*T,1,1)
-        diffs = goal - s
-
-        cost = torch.bmm(diffs.reshape(B*T,1,state_dim), torch.bmm(batch_Q, diffs.reshape(B*T, state_dim, 1))).reshape(B,T).sum(dim=1)
-        # cost += torch.bmm(u.reshape(B*T,1,control_dim), torch.bmm(batch_R, u.reshape(B*T, control_dim, 1))).reshape(B,T).sum(dim=1)
-        return cost
-    return quad_goal_cost
-
-
-# Generates an MPPI cost function for a trajectory-tracking objective
-# @input ref [torch.tensor (T_ref x state_dim)]: reference trajectory WITH THE SAME TIME DISCRETIZATION AS THE CONTROLLER
-# @input Q [torch.tensor (state_dim x state_dim)]: state weight matrix
-# @input R [torch.tensor (control_dim x control_dim)]: control weight matrix
-# output [function(torch.tensor(B), torch.tensor (B x T x state_dim), torch.tensor (B x T x control_dim)) -> torch.tensor (B)]:
-#       MPPI cost function
-def generate_traj_cost(ref: torch.tensor, Q: torch.tensor, R: torch.tensor) -> Callable[[torch.tensor, torch.tensor, torch.tensor], torch.tensor]:
-    # Trajectory-tracking cost function for MPPI, computing the cost for a batch of state and control trajectories
-    # @input t [torch.tensor (B)]: batch of initial timesteps
-    # @input s [torch.tensor (B x T x state_dim)]: batch of state trajectories
-    # @input u [torch.tensor (B x T x control_dim)]: batch of control trajectories
-    # @output [torch.tensor (B)]: batch of costs
-    def quad_traj_cost(t: torch.tensor, s: torch.tensor, u: torch.tensor) -> torch.tensor:
-        # Not using any control cost for now, since MPPI has its own control cost formula!
-        B = s.size(0)
-        T = s.size(1)
-        T_ref = ref.size(0)
-        state_dim = s.size(2)
-        # control_dim = u.size(2)
-
-        # This assumes t is filled with the same element, but it's REALLY hard to get around this assumption without complex
-        # logic to deal with the different length of each trajectory difference!
-        ref_end = int(min(t[0] + T, T_ref))
-        T_diff = ref_end - int(t[0])
-        # Turns into a goal cost if we have passed the time horizon of the trajectory!
-        diffs = ref[int(t[0]):ref_end,:] - s[:,:T_diff,:] if T_diff > 0 else ref[-1,:] - s
-        T_diff = T if T_diff <= 0 else T_diff
-
-        batch_Q = Q.repeat(B*T_diff,1,1)
-        # batch_R = R.repeat(B*T_diff,1,1)
-
-        cost = torch.bmm(diffs.reshape(B*T_diff,1,state_dim), torch.bmm(batch_Q, diffs.reshape(B*T_diff, state_dim, 1))).reshape(B,T_diff).sum(dim=1)
-        # cost += torch.bmm(u.reshape(B*T_diff,1,control_dim), torch.bmm(batch_R, u.reshape(B*T_diff, control_dim, 1))).reshape(B,T_diff).sum(dim=1)
-        return cost
-    return quad_traj_cost
-
-
-# Generates an MPPI terminal cost function for avoidance of cylindrical obstacles and of the ground
-# @input vehicle [Vehicle]: Vehicle object
-# @input obstacles [torch.tensor (N x 4)]: obstacles specified in the form (x, y, radius, height)
-# @input collision_radius [float]: effective collision radius for the vehicle (cylinder approximation)
-# @input collision_height [float]: effective collision height for the vehicle (cylinder approximation)
-# @input collision_cost [float]: cost of a collision on the trajectory
-# @output [function(torch.tensor (B x T x state_dim)) -> torch.tensor (B)]: function computing collision costs for a batch of
-#       state trajectories
-def generate_collision_cost(vehicle: Vehicle, obstacles: torch.tensor,
-                            collision_radius: float, collision_height: float, collision_cost: float = 1e6):
-    # MPPI collision terminal cost function
-    # @input s [torch.tensor (B x T x state_dim)]: batch of state trajectories
-    # @output [torch.tensor (B)]: batch of collision costs
-    def terminal_collision_cost(s: torch.tensor):
-        B = s.size(0)
-        T = s.size(1)
-        state_dim = s.size(2)
-        N = obstacles.size(0)
-        pos = vehicle.get_pos3d(s.reshape(B*T, state_dim)).reshape(B, T, 3)
-
-        # Check for ground collision
-        ground_collision = torch.any(pos[:,:,2] - 0.5*collision_height < 0.0, dim=1)
-
-        # Check for obstacle collisions
-        batch_pos = pos.repeat(N,1,1,1)
-        obstacle_collision = torch.any(torch.logical_and(
-            torch.any(batch_pos[:,:,:,2] - 0.5*collision_height < obstacles[:,3], dim=2),
-            torch.any(torch.linalg.norm(batch_pos[:,:,:,:2] - obstacles[:,:2].reshape(N,1,1,2), dim=3) < \
-                      (collision_radius + obstacles[:,2]), dim=2)
-        ).transpose(0,1), dim=1)
-
-        return collision_cost * torch.logical_or(ground_collision, obstacle_collision).float()
-    return terminal_collision_cost
 
 
 if __name__ == "__main__":

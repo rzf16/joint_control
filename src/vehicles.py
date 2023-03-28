@@ -34,11 +34,15 @@ class VarDescription:
 class Vehicle(ABC):
     # @input name [str]: vehicle name
     # @input s0 [torch.tensor (state_dim)]: initial vehicle state
+    # @input radius [float]: radius for collision checking (cylinder approximation)
+    # @input height [float]: height for collision checking (cylinder approximation)
     # @input vis_params [Dict("color": str)]: visualization parameters
-    def __init__(self, name: str, s0: torch.tensor, vis_params: Dict):
+    def __init__(self, name: str, s0: torch.tensor, radius: float, height: float, vis_params: Dict):
         assert(s0.size(0) == self.state_dim())
         self.name = name
         self._state = s0
+        self.radius = radius
+        self.height = height
         self.vis_params = vis_params
 
     @abstractclassmethod
@@ -209,12 +213,14 @@ class Vehicle(ABC):
 
 class Unicycle(Vehicle):
     # @input name [str]: vehicle name
+    # @input s0 [torch.tensor (state_dim)]: initial vehicle state
+    # @input radius [float]: radius for collision checking (cylinder approximation)
+    # @input height [float]: height for collision checking (cylinder approximation)
     # @input vis_params [Dict("length": float, "width": float, "height": float,
     #                         "wheel_radius": float, "wheel_width": float, "color": str)]:
     #     paramters for vehicle visualization (length, width, height, wheel radius, wheel width, color)
-    # @input s0 [torch.tensor (state_dim)]: initial vehicle state
-    def __init__(self, name: str, vis_params: Dict, s0: torch.tensor):
-        super().__init__(name, s0, vis_params)
+    def __init__(self, name: str, s0: torch.tensor, radius: float, height: float, vis_params: Dict):
+        super().__init__(name, s0, radius, height, vis_params)
 
     @classmethod
     def get_state_description(cls) -> List[VarDescription]:
@@ -300,14 +306,17 @@ class Unicycle(Vehicle):
 
 class Bicycle(Vehicle):
     # @input name [str]: vehicle name
+    # @input s0 [torch.tensor (state_dim)]: initial vehicle state
+    # @input radius [float]: radius for collision checking (cylinder approximation)
+    # @input height [float]: height for collision checking (cylinder approximation)
     # @input lf [float]: length from the front axle to the center of gravity
     # @input lr [float]: length from the rear axle to the center of gravity
     # @input vis_params [Dict("length": float, "width": float, "height": float,
     #                         "wheel_radius": float, "wheel_width": float, "color": str)]:
     #     paramters for vehicle visualization (length, width, height, wheel radius, wheel width, color)
-    # @input s0 [torch.tensor (state_dim)]: initial vehicle state
-    def __init__(self, name: str, lf: float, lr: float, vis_params: Dict, s0: torch.tensor):
-        super().__init__(name, s0, vis_params)
+    def __init__(self, name: str, s0: torch.tensor, radius: float, height: float,
+                 lf: float, lr: float, vis_params: Dict):
+        super().__init__(name, s0, radius, height, vis_params)
         self.lf = lf
         self.lr = lr
 
@@ -398,14 +407,18 @@ class Bicycle(Vehicle):
 
 class Quadrotor(Vehicle):
     # @input name [str]: vehicle name
+    # @input s0 [torch.tensor (state_dim)]: initial vehicle state
+    # @input radius [float]: radius for collision checking (cylinder approximation)
+    # @input height [float]: height for collision checking (cylinder approximation)
     # @input m [float]: vehicle mass
     # @input inertia [torch.tensor (3)]: vehicle inertia values (I_x, I_y, I_z)
     # @input g [float]: acceleration from gravity
     # @input vis_params [Dict("side_length": float, "height": float, "prop_radius": float, "prop_height": float, "color": str)]:
     #     paramters for vehicle visualization (side length, height, propeller radius, propeller height, color)
     # @input s0 [torch.tensor (state_dim)]: initial vehicle state
-    def __init__(self, name: str, m: float, inertia: torch.tensor, vis_params: Dict, s0: torch.tensor, g: float = 9.81):
-        super().__init__(name, s0, vis_params)
+    def __init__(self, name: str, s0: torch.tensor, radius: float, height: float,
+                 m: float, inertia: torch.tensor, vis_params: Dict, g: float = 9.81):
+        super().__init__(name, s0, radius, height, vis_params)
         self.m = m
         self.inertia = inertia
         self.g = g
@@ -565,14 +578,17 @@ class Quadrotor(Vehicle):
 
 class LinearizedQuadrotor(Vehicle):
     # @input name [str]: vehicle name
+    # @input s0 [torch.tensor (state_dim)]: initial vehicle state
+    # @input radius [float]: radius for collision checking (cylinder approximation)
+    # @input height [float]: height for collision checking (cylinder approximation)
     # @input m [float]: vehicle mass
     # @input inertia [torch.tensor (3)]: vehicle inertia values (I_x, I_y, I_z)
     # @input g [float]: acceleration from gravity
     # @input vis_params [Dict("side_length": float, "height": float, "prop_radius": float, "prop_height": float, "color": str)]:
     #     paramters for vehicle visualization (side length, height, propeller radius, propeller height, color)
-    # @input s0 [torch.tensor (state_dim)]: initial vehicle state
-    def __init__(self, name: str, m: float, inertia: torch.tensor, vis_params: Dict, s0: torch.tensor, g: float = 9.81):
-        super().__init__(name, s0, vis_params)
+    def __init__(self, name: str, s0: torch.tensor, radius: float, height: float,
+                 m: float, inertia: torch.tensor, vis_params: Dict, g: float = 9.81):
+        super().__init__(name, s0, radius, height, vis_params)
         self.m = m
         self.inertia = inertia
         self.g = g

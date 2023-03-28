@@ -3,13 +3,12 @@ Vehicle system combining multiple vehicles and data recording into one class
 Author: rzfeng
 '''
 from copy import deepcopy
-from typing import Dict, Callable, Tuple, Optional
+from typing import Dict, Callable, Tuple, Optional, List
 
 import torch
 
 from src.vehicles import Vehicle
 from src.recorder import DataRecorder
-from src.integration import ExplicitEulerIntegrator
 
 
 class VehicleSystem:
@@ -18,14 +17,21 @@ class VehicleSystem:
     #       dictionary of vehicle running cost functions
     # @input terminal_costs [Dict[str, Optional[function(torch.tensor (B x T x state_dim)) -> torch.tensor (B)]]]:
     #       dictionary of vehicle terminal cost functions
-    # TODO: add joint cost functions
+    # @input joint_running_costs [List[ function(torch.tensor(B), torch.tensor (B x T x state_dim), torch.tensor (B x T x control_dim)) -> torch.tensor (B)]]:
+    #       list of joint running cost functions
+    # @input joint_terminal_costs [List[function(torch.tensor (B x T x state_dim)) -> torch.tensor (B)]]:
+    #       list of joint terminal cost functions
     def __init__(self, vehicles: Dict[str, Vehicle],
                        running_costs: Dict[str, Callable[[torch.tensor, torch.tensor, torch.tensor], torch.tensor]],
                        terminal_costs: Dict[str, Optional[Callable[[torch.tensor], torch.tensor]]],
+                       joint_running_costs: List[Callable[[torch.tensor, torch.tensor, torch.tensor], torch.tensor]],
+                       joint_terminal_costs: List[Optional[Callable[[torch.tensor], torch.tensor]]]
                        ):
         self.vehicles = vehicles
         self.running_costs = running_costs
         self.terminal_costs = terminal_costs
+        self.joint_running_costs = joint_running_costs
+        self.joint_terminal_costs = joint_terminal_costs
         self.state = torch.cat([vehicle.get_state() for vehicle in self.vehicles.values()])
 
         self.state_idxs = {}
@@ -110,6 +116,8 @@ class VehicleSystem:
             # Add the cost for this vehicle
             cost += self.running_costs[vehicle_name](t, s[:,:,self.state_idxs[vehicle_name][0]:self.state_idxs[vehicle_name][1]],
                                                      u[:,:,self.control_idxs[vehicle_name][0]:self.control_idxs[vehicle_name][1]])
+        for joint_cost_fn in self.joint_running_costs:
+            cost += joint_cost_fn(t, s, u)
         return cost
 
     # Joint terminal cost function, computing the cost for a batch of states
@@ -122,6 +130,8 @@ class VehicleSystem:
             # Add the cost for this vehicle
             if self.terminal_costs[vehicle_name] is not None:
                 cost += self.terminal_costs[vehicle_name](s[:,:,self.state_idxs[vehicle_name][0]:self.state_idxs[vehicle_name][1]])
+        for joint_cost_fn in self.joint_terminal_costs:
+            cost += joint_cost_fn(s)
         return cost
 
     # Applies a control sequence to the system
