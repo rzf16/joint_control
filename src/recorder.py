@@ -66,7 +66,7 @@ class DataRecorder:
     # Writes recorded data to disk as NumPy arrays
     # @input cfg_path [str]: path to configuration file
     # @input vehicles [List[Vehicle]]: vehicles to write data for
-    # @input prefix [str]: data directory prefix (e.g. "run" -> run1, run2, etc.)
+    # @input prefix [str]: data directory prefix (e.g. "run" -> run001, run002, etc.)
     def write_data(self, cfg_path: str, vehicles: List[Vehicle], prefix: str = "run"):
         if not vehicles:
             return
@@ -156,62 +156,76 @@ class DataRecorder:
 
     # Plots the 2D xy trajectory of vehicles
     # @input vehicles [List[Vehicle]]: vehicles to visualize
+    # @input objectives [List[torch.tensor]]: objectives for each vehicle
     # @input obstacles [List[Tuple[float]]]: cylindrical obstacles (x, y, radius, height)
-    def plot_traj2d(self, vehicles: List[Vehicle], obstacles: List[Tuple[float]] = []):
-        if not vehicles:
-            return
-
-        plt.figure()
-
-        for vehicle in vehicles:
-            states, times = self.data[vehicle.name].state_traj.as_np()
-            pts = vehicle.get_pos2d(torch.from_numpy(states)).numpy()
-            plt.plot(pts[:,0], pts[:,1], label=vehicle.name, color=vehicle.vis_params["color"])
-
-        for obs in obstacles:
-            plt.Circle(obs[:2], obs[2], color='k')
-
-        plt.title(f"2D trajectories")
-        plt.xlabel("x")
-        plt.ylabel("y")
-        plt.legend()
-        plt.show()
-
-    # Plots the 3D trajectory of vehicles
-    # @input vehicles [List[Vehicle]]: vehicles to visualize
-    def plot_traj3d(self, vehicles: List[Vehicle]):
+    def plot_traj2d(self, vehicles: List[Vehicle], objectives: List[torch.tensor], obstacles: List[Tuple[float]] = []):
         if not vehicles:
             return
 
         fig = plt.figure()
-        ax = Axes3D(fig, auto_add_to_figure=False, aspect="equal")
-        fig.add_axes(ax)
+        ax = plt.axes(aspect="equal")
 
-        for vehicle in vehicles:
+        for vehicle, objective in zip(vehicles, objectives):
             states, times = self.data[vehicle.name].state_traj.as_np()
-            pts = vehicle.get_pos3d(torch.from_numpy(states)).numpy()
-            ax.plot(pts[:,0], pts[:,1], pts[:,2], label=vehicle.name, color=vehicle.vis_params["color"])
+            pts = vehicle.get_pos2d(torch.from_numpy(states)).numpy()
+            ax.plot(pts[:,0], pts[:,1], label=vehicle.name, color=vehicle.vis_params["color"])
 
-        # TODO: draw obstacles
+            # Goal objective
+            if objective.dim() == 1:
+                center = vehicle.get_pos2d(objective.unsqueeze(0)).squeeze().numpy()
+                # Explicitly cycle colors!
+                ax.add_patch(Circle(center, 1.0, label=f"{vehicle.name} objective", color=ax._get_lines.get_next_color()))
+            # Trajectory objective
+            elif objective.dim() == 2:
+                traj_pts = vehicle.get_pos2d(objective).numpy()
+                ax.plot(traj_pts[:,0], traj_pts[:,1], label=f"{vehicle.name} objective")
 
-        equalize_axes3d(ax)
-        ax.set_title(f"3D trajectories")
+        for obs in obstacles:
+            ax.add_patch(Circle(obs[:2], obs[2], color='k'))
+
+        ax.set_title(f"2D trajectories")
         ax.set_xlabel("x")
         ax.set_ylabel("y")
-        ax.set_zlabel("z")
-        ax.legend()
-
+        ax.legend(loc="upper left")
         plt.show()
+
+    # # Plots the 3D trajectory of vehicles
+    # # @input vehicles [List[Vehicle]]: vehicles to visualize
+    # def plot_traj3d(self, vehicles: List[Vehicle]):
+    #     if not vehicles:
+    #         return
+
+    #     fig = plt.figure()
+    #     ax = Axes3D(fig, auto_add_to_figure=False, aspect="equal")
+    #     fig.add_axes(ax)
+
+    #     for vehicle in vehicles:
+    #         states, times = self.data[vehicle.name].state_traj.as_np()
+    #         pts = vehicle.get_pos3d(torch.from_numpy(states)).numpy()
+    #         ax.plot(pts[:,0], pts[:,1], pts[:,2], label=vehicle.name, color=vehicle.vis_params["color"])
+
+    #     # TODO: draw obstacles
+    #     # TODO: draw objectives
+
+    #     equalize_axes3d(ax)
+    #     ax.set_title(f"3D trajectories")
+    #     ax.set_xlabel("x")
+    #     ax.set_ylabel("y")
+    #     ax.set_zlabel("z")
+    #     ax.legend()
+
+    #     plt.show()
 
     # Animates the 2D trajectory of vehicles
     # @input vehicles [List[Vehicle]]: vehicles to animate
+    # @input objectives [List[torch.tensor]]: objectives for each vehicle
     # @input obstacles [List[Tuple[float]]]: cylindrical obstacles (x, y, radius, height)
     # @input hold_traj [bool]: maintain a line representing the 2D position trajectory
     # @input n_frames [Optional[int]]: number of frames to animate
     # @input fps [int]: frames per second
     # @input end_wait [float]: seconds to wait at the end before finishing the animation
     # @input write [Optional[str]]: filename to write the animation to (EXCLUDING "media/""); None indicates not to write
-    def animate2d(self, vehicles: List[Vehicle], obstacles: List[Tuple[float]] = [], hold_traj: bool = True,
+    def animate2d(self, vehicles: List[Vehicle], objectives: List[torch.tensor], obstacles: List[Tuple[float]] = [], hold_traj: bool = True,
                   n_frames: Optional[int] = None, fps: int = 5, end_wait: float = 1.0, write: Optional[str] = None):
         if not vehicles:
             return
@@ -224,9 +238,20 @@ class DataRecorder:
         pos2ds = [vehicle.get_pos2d(torch.from_numpy(state_traj[0])).numpy() for vehicle, state_traj in zip(vehicles, state_trajs)]
 
         # Plot all patches to get the axis limits
-        for vehicle, state_traj in zip(vehicles, state_trajs):
+        for vehicle, state_traj, objective in zip(vehicles, state_trajs, objectives):
             for state in state_traj[0]:
                 vehicle.add_vis2d(ax, torch.from_numpy(state))
+
+            # Goal objective
+            if objective.dim() == 1:
+                center = vehicle.get_pos2d(objective.unsqueeze(0)).squeeze().numpy()
+                # Explicitly cycle colors!
+                ax.add_patch(Circle(center, 1.0, label=f"{vehicle.name} objective", color=ax._get_lines.get_next_color()))
+            # Trajectory objective
+            elif objective.dim() == 2:
+                traj_pts = vehicle.get_pos2d(objective).numpy()
+                ax.plot(traj_pts[:,0], traj_pts[:,1], label=f"{vehicle.name} objective")
+
         ax.autoscale_view()
         # Now clear the axes and set the axis limits
         lims = (ax.get_xlim(), ax.get_ylim())
@@ -237,6 +262,19 @@ class DataRecorder:
 
         for obs in obstacles:
             ax.add_patch(Circle(obs[:2], obs[2], color='k'))
+
+        objective_legend_patches = []
+        for vehicle, objective in zip(vehicles, objectives):
+            # Goal objective
+            if objective.dim() == 1:
+                center = vehicle.get_pos2d(objective.unsqueeze(0)).squeeze().numpy()
+                # Explicitly cycle colors!
+                objective_legend_patches.append(ax.add_patch(Circle(center, 1.0, label=f"{vehicle.name} objective",
+                                                          color=ax._get_lines.get_next_color())))
+            # Trajectory objective
+            elif objective.dim() == 2:
+                traj_pts = vehicle.get_pos2d(objective).numpy()
+                objective_legend_patches.append(ax.plot(traj_pts[:,0], traj_pts[:,1], label=f"{vehicle.name} objective")[0])
 
         traj_lines = [ax.plot([],[], color=vehicle.vis_params["color"])[0] for vehicle in vehicles] if hold_traj else []
         vehicle_drawings = [[] for vehicle in vehicles]
@@ -265,10 +303,10 @@ class DataRecorder:
         frame_iter = np.append(np.linspace(0.0, max_t, n_frames), max_t * np.ones(end_buffer))
         anim = animation.FuncAnimation(fig, anim_fn, frames=frame_iter, interval = 1000.0 / fps, blit=True)
 
-        legend_patches = []
+        vehicle_legend_patches = []
         for vehicle in vehicles:
-            legend_patches.append(Patch(color=vehicle.vis_params["color"], label=vehicle.name))
-        ax.legend(handles=legend_patches, loc="upper left")
+            vehicle_legend_patches.append(Patch(color=vehicle.vis_params["color"], label=vehicle.name))
+        ax.legend(handles=[*vehicle_legend_patches, *objective_legend_patches], loc="upper left")
         ax.set_title(f"2D trajectory animation")
         ax.set_xlabel("x")
         ax.set_ylabel("y")
@@ -283,89 +321,90 @@ class DataRecorder:
 
         plt.show()
 
-    # Animates the 3D trajectory of vehicles
-    # TODO: investigate why the live animation doesn't show vehicle bodies
-    # @input vehicles [List[Vehicle]]: vehicles to animate
-    # @input hold_traj [bool]: maintain a line representing the 2D position trajectory
-    # @input n_frames [Optional[int]]: number of frames to animate
-    # @input fps [int]: frames per second
-    # @input end_wait [float]: seconds to wait at the end before finishing the animation
-    # @input camera_angle Optional[Tuple[float] (3)]: camera angle (elevation, azimuth, roll)
-    # @input write [Optional[str]]: filename to write the animation to (EXCLUDING "media/""); None indicates not to write
-    def animate3d(self, vehicles: List[Vehicle], hold_traj: bool = True,
-                  n_frames: Optional[int] = None, fps: int = 5, end_wait: float = 1.0, write: Optional[str] = None,
-                  camera_angle: Optional[np.ndarray] = None):
-        if not vehicles:
-            return
+    # # Animates the 3D trajectory of vehicles
+    # # TODO: investigate why the live animation doesn't show vehicle bodies
+    # # @input vehicles [List[Vehicle]]: vehicles to animate
+    # # @input hold_traj [bool]: maintain a line representing the 2D position trajectory
+    # # @input n_frames [Optional[int]]: number of frames to animate
+    # # @input fps [int]: frames per second
+    # # @input end_wait [float]: seconds to wait at the end before finishing the animation
+    # # @input camera_angle Optional[Tuple[float] (3)]: camera angle (elevation, azimuth, roll)
+    # # @input write [Optional[str]]: filename to write the animation to (EXCLUDING "media/""); None indicates not to write
+    # def animate3d(self, vehicles: List[Vehicle], hold_traj: bool = True,
+    #               n_frames: Optional[int] = None, fps: int = 5, end_wait: float = 1.0, write: Optional[str] = None,
+    #               camera_angle: Optional[np.ndarray] = None):
+    #     if not vehicles:
+    #         return
 
-        fig = plt.figure()
-        ax = Axes3D(fig, auto_add_to_figure=False, aspect="equal")
-        fig.add_axes(ax)
+    #     fig = plt.figure()
+    #     ax = Axes3D(fig, auto_add_to_figure=False, aspect="equal")
+    #     fig.add_axes(ax)
 
-        state_trajs = [self.data[vehicle.name].state_traj.as_np() for vehicle in vehicles]
-        pos3ds = [vehicle.get_pos3d(torch.from_numpy(state_traj[0])).numpy() for vehicle, state_traj in zip(vehicles, state_trajs)]
+    #     state_trajs = [self.data[vehicle.name].state_traj.as_np() for vehicle in vehicles]
+    #     pos3ds = [vehicle.get_pos3d(torch.from_numpy(state_traj[0])).numpy() for vehicle, state_traj in zip(vehicles, state_trajs)]
 
-        # Plot all patches to get the axis limits
-        for vehicle, state_traj in zip(vehicles, state_trajs):
-            for state in state_traj[0]:
-                vehicle.add_vis3d(ax, torch.from_numpy(state))
-        ax.autoscale_view()
-        # Now clear the axes and set the axis limits
-        lims = (ax.get_xlim(), ax.get_ylim(), ax.get_zlim())
-        ax.clear()
-        ax.set_xlim(lims[0])
-        ax.set_ylim(lims[1])
-        ax.set_zlim(lims[2])
-        equalize_axes3d(ax)
-        ax.autoscale(False)
-        if camera_angle is not None:
-            ax.view_init(elev=camera_angle[0], azim=camera_angle[1], roll=camera_angle[2])
+    #     # Plot all patches to get the axis limits
+    #     for vehicle, state_traj in zip(vehicles, state_trajs):
+    #         for state in state_traj[0]:
+    #             vehicle.add_vis3d(ax, torch.from_numpy(state))
+    #     ax.autoscale_view()
+    #     # Now clear the axes and set the axis limits
+    #     lims = (ax.get_xlim(), ax.get_ylim(), ax.get_zlim())
+    #     ax.clear()
+    #     ax.set_xlim(lims[0])
+    #     ax.set_ylim(lims[1])
+    #     ax.set_zlim(lims[2])
+    #     equalize_axes3d(ax)
+    #     ax.autoscale(False)
+    #     if camera_angle is not None:
+    #         ax.view_init(elev=camera_angle[0], azim=camera_angle[1], roll=camera_angle[2])
 
-        # TODO: draw obstacles
+    #     # TODO: draw obstacles
+    #     # TODO: draw objectives
 
-        traj_lines = [ax.plot([],[],[], color=vehicle.vis_params["color"])[0] for vehicle in vehicles] if hold_traj else []
-        vehicle_drawings = [[] for vehicle in vehicles]
-        # Animation function for Matplotlib
-        def anim_fn(t):
-            for v_idx in range(len(vehicles)):
-                # Get the appropriate index for the time point
-                n = np.searchsorted(state_trajs[v_idx][1], t)
-                if n >= state_trajs[v_idx][1].size:
-                    continue
+    #     traj_lines = [ax.plot([],[],[], color=vehicle.vis_params["color"])[0] for vehicle in vehicles] if hold_traj else []
+    #     vehicle_drawings = [[] for vehicle in vehicles]
+    #     # Animation function for Matplotlib
+    #     def anim_fn(t):
+    #         for v_idx in range(len(vehicles)):
+    #             # Get the appropriate index for the time point
+    #             n = np.searchsorted(state_trajs[v_idx][1], t)
+    #             if n >= state_trajs[v_idx][1].size:
+    #                 continue
 
-                # Draw trajectories
-                if hold_traj:
-                    traj_lines[v_idx].set_data(pos3ds[v_idx][:n,0], pos3ds[v_idx][:n,1])
-                    traj_lines[v_idx].set_3d_properties(pos3ds[v_idx][:n,2])
+    #             # Draw trajectories
+    #             if hold_traj:
+    #                 traj_lines[v_idx].set_data(pos3ds[v_idx][:n,0], pos3ds[v_idx][:n,1])
+    #                 traj_lines[v_idx].set_3d_properties(pos3ds[v_idx][:n,2])
 
-                # Replace previous drawings
-                for artist in vehicle_drawings[v_idx]:
-                    artist.remove()
-                vehicle_drawings[v_idx] = vehicles[v_idx].add_vis3d(ax, torch.from_numpy(state_trajs[v_idx][0][n,:]))
+    #             # Replace previous drawings
+    #             for artist in vehicle_drawings[v_idx]:
+    #                 artist.remove()
+    #             vehicle_drawings[v_idx] = vehicles[v_idx].add_vis3d(ax, torch.from_numpy(state_trajs[v_idx][0][n,:]))
 
-            return traj_lines + [artist for artists in vehicle_drawings for artist in artists]
+    #         return traj_lines + [artist for artists in vehicle_drawings for artist in artists]
 
-        max_t = max([state_traj[1].max() for state_traj in state_trajs])
-        n_frames = max([state_traj[1].size for state_traj in state_trajs]) if n_frames is None else n_frames
-        end_buffer = int(np.ceil(end_wait * fps))
-        frame_iter = np.append(np.linspace(0.0, max_t, n_frames), max_t * np.ones(end_buffer))
-        anim = animation.FuncAnimation(fig, anim_fn, frames=frame_iter, interval = 1000.0 / fps, blit=True)
+    #     max_t = max([state_traj[1].max() for state_traj in state_trajs])
+    #     n_frames = max([state_traj[1].size for state_traj in state_trajs]) if n_frames is None else n_frames
+    #     end_buffer = int(np.ceil(end_wait * fps))
+    #     frame_iter = np.append(np.linspace(0.0, max_t, n_frames), max_t * np.ones(end_buffer))
+    #     anim = animation.FuncAnimation(fig, anim_fn, frames=frame_iter, interval = 1000.0 / fps, blit=True)
 
-        legend_patches = []
-        for vehicle in vehicles:
-            legend_patches.append(Patch(color=vehicle.vis_params["color"], label=vehicle.name))
-        ax.legend(handles=legend_patches)
-        ax.set_title(f"3D trajectory animation")
-        ax.set_xlabel("x")
-        ax.set_ylabel("y")
-        ax.set_zlabel("z")
+    #     legend_patches = []
+    #     for vehicle in vehicles:
+    #         legend_patches.append(Patch(color=vehicle.vis_params["color"], label=vehicle.name))
+    #     ax.legend(handles=legend_patches)
+    #     ax.set_title(f"3D trajectory animation")
+    #     ax.set_xlabel("x")
+    #     ax.set_ylabel("y")
+    #     ax.set_zlabel("z")
 
-        if write is not None:
-            write_path = os.path.join(MEDIA_DIR, write)
-            overwrite = True
-            if os.path.exists(write_path):
-                overwrite = input(f"[Recorder] Write path {write_path} exists. Overwrite? (y/n) ") == "y"
-            if overwrite:
-                anim.save(os.path.join(MEDIA_DIR, write))
+    #     if write is not None:
+    #         write_path = os.path.join(MEDIA_DIR, write)
+    #         overwrite = True
+    #         if os.path.exists(write_path):
+    #             overwrite = input(f"[Recorder] Write path {write_path} exists. Overwrite? (y/n) ") == "y"
+    #         if overwrite:
+    #             anim.save(os.path.join(MEDIA_DIR, write))
 
-        plt.show()
+    #     plt.show()

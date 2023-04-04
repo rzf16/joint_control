@@ -73,6 +73,7 @@ def main():
             print(f"MPPI reached the goal after {i+1} steps ({t+cfg['mppi']['dt']} seconds)!")
             break
 
+    # TODO: per-vehicle
     if not goal_reached:
         print(f"MPPI failed to reach the goal within tolerance after {i+1} steps ({t+cfg['mppi']['dt']} seconds) D:")
     print(f"Final state: {s.tolist()}")
@@ -93,26 +94,30 @@ def main():
     obstacles = [(*obs["center"], obs["radius"], obs["height"]) for obs in cfg["obstacles"]]
 
     system.recorder.plot_traj2d([vehicle for vehicle in system.vehicles.values()
-                                 if cfg["vehicles"][vehicle.name]["plot_traj2d"]],
+                                         if cfg["vehicles"][vehicle.name]["plot_traj2d"]],
+                                [torch.from_numpy(np.genfromtxt("bike1_traj.csv",delimiter=",", dtype=np.float32)),
+                                 torch.tensor([10.0, 10.0, -5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])],
                                 obstacles=obstacles)
-    system.recorder.plot_traj3d([vehicle for vehicle in system.vehicles.values()
-                                 if cfg["vehicles"][vehicle.name]["plot_traj3d"]])
+    # system.recorder.plot_traj3d([vehicle for vehicle in system.vehicles.values()
+    #                              if cfg["vehicles"][vehicle.name]["plot_traj3d"]])
 
     system.recorder.animate2d([vehicle for vehicle in system.vehicles.values()
-                               if cfg["vehicles"][vehicle.name]["animate2d"]],
+                                       if cfg["vehicles"][vehicle.name]["animate2d"]],
+                              [torch.from_numpy(np.genfromtxt("bike1_traj.csv",delimiter=",", dtype=np.float32)),
+                                 torch.tensor([10.0, 10.0, -5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])],
                               obstacles=obstacles,
                               hold_traj=cfg["animation"]["2d"]["hold_traj"],
                               n_frames=cfg["animation"]["2d"]["n_frames"] if cfg["animation"]["3d"]["n_frames"] > 0 else None,
                               fps=cfg["animation"]["2d"]["fps"],
                               end_wait=cfg["animation"]["2d"]["end_wait"],
                               write=cfg["animation"]["2d"]["filename"] if cfg["animation"]["3d"]["filename"] else None)
-    system.recorder.animate3d([vehicle for vehicle in system.vehicles.values()
-                               if cfg["vehicles"][vehicle.name]["animate3d"]],
-                               hold_traj=cfg["animation"]["3d"]["hold_traj"],
-                               n_frames=cfg["animation"]["3d"]["n_frames"] if cfg["animation"]["3d"]["n_frames"] > 0 else None,
-                               fps=cfg["animation"]["3d"]["fps"],
-                               end_wait=cfg["animation"]["3d"]["end_wait"],
-                               write=cfg["animation"]["3d"]["filename"] if cfg["animation"]["3d"]["filename"] else None)
+    # system.recorder.animate3d([vehicle for vehicle in system.vehicles.values()
+    #                            if cfg["vehicles"][vehicle.name]["animate3d"]],
+    #                            hold_traj=cfg["animation"]["3d"]["hold_traj"],
+    #                            n_frames=cfg["animation"]["3d"]["n_frames"] if cfg["animation"]["3d"]["n_frames"] > 0 else None,
+    #                            fps=cfg["animation"]["3d"]["fps"],
+    #                            end_wait=cfg["animation"]["3d"]["end_wait"],
+    #                            write=cfg["animation"]["3d"]["filename"] if cfg["animation"]["3d"]["filename"] else None)
 
 
 # Extracts a VehicleSystem from the configuration
@@ -222,7 +227,9 @@ def extract_vehicles(cfg: Dict) -> VehicleSystem:
 
 # Extracts the goal and a goal test function from the configuration
 # @input cfg [Dict]: configuration
-# @output [function(torch.tensor (B x state_dim)) -> torch.tensor]: goal test
+# @output [torch.tensor (state_dim)]: goal
+# @output [function(torch.tensor (B x state_dim)) -> torch.tensor (B, N)]: goal test
+# TODO: make this a function of the system?
 def extract_goal(cfg: Dict) -> Tuple[torch.tensor, Callable[[torch.tensor], torch.tensor]]:
     goal_state = []
     tolerance = []
