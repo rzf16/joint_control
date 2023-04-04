@@ -19,10 +19,10 @@ vehicles:
     # Task parameters
     s0: [0.0, 0.0, 0.0, 0.0]
     objective:
-      # type: "goal"
-      # goal: [10.0, 10.0, 0.7854, 0.0]
-      type: "traj"
-      traj: "bike1_traj.csv"
+      type: "goal"
+      goal: [10.0, 10.0, 0.7854, 0.0]
+      # type: "traj"
+      # traj: "bike1_traj.csv"
       tolerance: [0.5, 0.5, 3.1416, 0.1]
       Q_diag: [1.0, 1.0, 0.1, 1.0]
       R_diag: [2.0, 0.5]
@@ -92,11 +92,11 @@ vehicles:
     objective:
       type: "goal"
       goal: [10.0, 10.0, -5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-      tolerance: [0.5, 0.5, 0.5, 3.1416, 3.1416, 3.1416, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25]
-      Q_diag: [1.0, 1.0, 1.0, 5.0, 5.0, 5.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+      tolerance: [1.0, 1.0, 1.0, 3.1416, 3.1416, 3.1416, 0.25, 0.25, 0.25, 0.5, 0.5, 0.5]
+      Q_diag: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
       R_diag: [1.0, 1.0, 1.0, 1.0]
     mppi_sigma_diag: [5.0, 0.5, 0.5, 0.5]
-    cost_weight: 10000.0
+    cost_weight: 1.0
 
     # Data recording/visualization flags
     write_data: False
@@ -116,21 +116,21 @@ obstacles:
 # MPPI parameters
 mppi:
   dt: 0.1
-  horizon: 10
+  horizon: 15
   n_samples: 10000
   lambda_: 0.01
   warm_start_steps: 10
-  max_steps: 100
+  max_steps: 250
   collision_cost: 100000
 
 # Joint costs
-joint_costs:
-  - running: False
-    type: "distance"
-    ego: "quad1"
-    targets: ["bike1"]
-    dist: 8.0
-    cost: 100000
+joint_costs: []
+  # - running: False
+  #   type: "distance"
+  #   ego: "quad1"
+  #   targets: ["bike1"]
+  #   dist: 8.0
+  #   cost: 100000
 
 # Animation parameters
 animation:
@@ -138,11 +138,11 @@ animation:
     filename: ""
     hold_traj: True
     n_frames: -1
-    fps: 5
+    fps: 20
     end_wait: 1.0
-  3d:
-    filename: ""
-    hold_traj: True
-    n_frames: -1
-    fps: 5
-    end_wait: 1.0
+  # 3d:
+  #   filename: ""
+  #   hold_traj: True
+  #   n_frames: -1
+  #   fps: 20
+  #   end_wait: 1.0

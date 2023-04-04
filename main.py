@@ -26,7 +26,7 @@ def main():
     # Instantiate system and controller
     cfg = yaml.safe_load(open(CFG_PATH))
     system = extract_vehicles(cfg)
-    goal_state, goal_test = extract_goal(cfg)
+    objectives, goal_states, goal_test = extract_goal(cfg, system)
     controller = MPPI(system.generate_discrete_dynamics(cfg["mppi"]["dt"]),
                       system.running_cost,
                       system.state_dim(),
@@ -57,27 +57,38 @@ def main():
     controller.warm_start(s, cfg["mppi"]["warm_start_steps"])
 
     # Main control loop
+    dt = cfg["mppi"]["dt"]
     times = []
-    goal_reached = False
     for i in range(cfg["mppi"]["max_steps"]):
-        t = i*cfg["mppi"]["dt"]
+        t = i*dt
         tic = time.time()
         control = controller.get_command(s)
         toc = time.time()
         times.append(toc - tic)
-        system.apply_control(control.repeat(2,1), (t, t+cfg["mppi"]["dt"]))
+        system.apply_control(control.repeat(2,1), (t, t+dt))
         s = system.get_state()
 
-        if goal_test(s.unsqueeze(0)).squeeze():
-            goal_reached = True
-            print(f"MPPI reached the goal after {i+1} steps ({t+cfg['mppi']['dt']} seconds)!")
+        all_goals_reached, goal_reached = goal_test(s.unsqueeze(0))
+        all_goals_reached = all_goals_reached.squeeze()
+        goal_reached = {key: value.squeeze() for key, value in goal_reached.items()}
+        if all_goals_reached:
+            print(f"MPPI reached all goals after {i+1} steps ({t+cfg['mppi']['dt']} seconds)!")
+            print("\n")
             break
 
-    # TODO: per-vehicle
-    if not goal_reached:
-        print(f"MPPI failed to reach the goal within tolerance after {i+1} steps ({t+cfg['mppi']['dt']} seconds) D:")
-    print(f"Final state: {s.tolist()}")
-    print(f"Final goal error: {(goal_state - s).tolist()}")
+    if not all_goals_reached:
+        print(f"MPPI failed to reach the goals within tolerance after {i+1} steps ({t+dt} seconds) D:")
+        for vehicle_name, success in goal_reached.items():
+            if success:
+                print(f"{vehicle_name} reached its goal!")
+            else:
+                print(f"{vehicle_name} failed to reach its goal D:")
+        print("\n")
+
+    for vehicle_name, vehicle in system.vehicles.items():
+        print(f"{vehicle_name} final state: {vehicle.get_state().tolist()}")
+        print(f"{vehicle_name} goal error: {(vehicle.get_state() - goal_states[vehicle_name]).tolist()}")
+        print("\n")
     print(f"Average MPPI compute time: {sum(times) / len(times)} seconds")
 
     # Data recording and visualization
@@ -95,22 +106,22 @@ def main():
 
     system.recorder.plot_traj2d([vehicle for vehicle in system.vehicles.values()
                                          if cfg["vehicles"][vehicle.name]["plot_traj2d"]],
-                                [torch.from_numpy(np.genfromtxt("bike1_traj.csv",delimiter=",", dtype=np.float32)),
-                                 torch.tensor([10.0, 10.0, -5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])],
+                                [objective for vehicle_name, objective in objectives.items()
+                                           if cfg["vehicles"][vehicle_name]["plot_traj2d"]],
                                 obstacles=obstacles)
     # system.recorder.plot_traj3d([vehicle for vehicle in system.vehicles.values()
     #                              if cfg["vehicles"][vehicle.name]["plot_traj3d"]])
 
     system.recorder.animate2d([vehicle for vehicle in system.vehicles.values()
                                        if cfg["vehicles"][vehicle.name]["animate2d"]],
-                              [torch.from_numpy(np.genfromtxt("bike1_traj.csv",delimiter=",", dtype=np.float32)),
-                                 torch.tensor([10.0, 10.0, -5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])],
+                              [objective for vehicle_name, objective in objectives.items()
+                                         if cfg["vehicles"][vehicle_name]["animate2d"]],
                               obstacles=obstacles,
                               hold_traj=cfg["animation"]["2d"]["hold_traj"],
-                              n_frames=cfg["animation"]["2d"]["n_frames"] if cfg["animation"]["3d"]["n_frames"] > 0 else None,
+                              n_frames=cfg["animation"]["2d"]["n_frames"] if cfg["animation"]["2d"]["n_frames"] > 0 else None,
                               fps=cfg["animation"]["2d"]["fps"],
                               end_wait=cfg["animation"]["2d"]["end_wait"],
-                              write=cfg["animation"]["2d"]["filename"] if cfg["animation"]["3d"]["filename"] else None)
+                              write=cfg["animation"]["2d"]["filename"] if cfg["animation"]["2d"]["filename"] else None)
     # system.recorder.animate3d([vehicle for vehicle in system.vehicles.values()
     #                            if cfg["vehicles"][vehicle.name]["animate3d"]],
     #                            hold_traj=cfg["animation"]["3d"]["hold_traj"],
@@ -227,31 +238,40 @@ def extract_vehicles(cfg: Dict) -> VehicleSystem:
 
 # Extracts the goal and a goal test function from the configuration
 # @input cfg [Dict]: configuration
-# @output [torch.tensor (state_dim)]: goal
-# @output [function(torch.tensor (B x state_dim)) -> torch.tensor (B, N)]: goal test
-# TODO: make this a function of the system?
-def extract_goal(cfg: Dict) -> Tuple[torch.tensor, Callable[[torch.tensor], torch.tensor]]:
-    goal_state = []
-    tolerance = []
-    for vehicle_info in cfg["vehicles"].values():
+# @output [Dict[str: torch.tensor]]: objectives (either a goal state or trajectory) for each vehicle
+# @output [Dict[str: torch.tensor (state_dim)]]: goal states for each vehicle
+# @output [function(torch.tensor (B x full_state_dim)) -> torch.tensor (B, n_vehicles)]: goal test
+def extract_goal(cfg: Dict, system: VehicleSystem) -> Tuple[Dict, Dict, Callable[[torch.tensor], Tuple[Dict, torch.tensor]]]:
+    objectives = {}
+    goal_states = {}
+    tolerances = {}
+    for vehicle_name, vehicle_info in cfg["vehicles"].items():
         if vehicle_info["objective"]["type"] == "goal":
-            goal_state.extend(vehicle_info["objective"]["goal"])
+            objectives[vehicle_name] = torch.tensor(vehicle_info["objective"]["goal"])
+            goal_states[vehicle_name] = torch.tensor(vehicle_info["objective"]["goal"])
         elif vehicle_info["objective"]["type"] == "traj":
-            goal_state.extend(np.genfromtxt(vehicle_info["objective"]["traj"],delimiter=",",dtype=np.float32)[-1,:].tolist())
+            objectives[vehicle_name] = torch.from_numpy(np.genfromtxt(vehicle_info["objective"]["traj"],
+                                                                      delimiter=",", dtype=np.float32))
+            goal_states[vehicle_name] = objectives[vehicle_name][-1,:]
         else:
             print("[Main] Error! Unrecognized objective type.")
             exit()
-        tolerance.extend(vehicle_info["objective"]["tolerance"])
-    goal_state = torch.tensor(goal_state)
-    tolerance = torch.tensor(tolerance)
+        tolerances[vehicle_name] = torch.tensor(vehicle_info["objective"]["tolerance"])
 
     # Returns true if the goal is reached within the tolerance
-    # @input s [torch.tensor (B x state_dim)]: batch of states
-    # @output [torch.tensor (B)]: boolean tensor specifying goal reached
+    # @input s [torch.tensor (B x full_state_dim)]: batch of states
+    # @output [torch.tensor (B)]: tensor indicating goal reached for all vehicles
+    # @output [Dict[str: torch.tensor (B)]]: boolean tensor specifying goal reached for each vehicle
     def goal_test(s: torch.tensor):
-        return torch.all(torch.abs(goal_state - s) < tolerance, dim=1)
+        goal_reached = {}
+        all_goals_reached = torch.ones(s.size(0), dtype=torch.bool)
+        for vehicle_name in system.vehicles.keys():
+            vehicle_state = s[:, system.state_idxs[vehicle_name][0]:system.state_idxs[vehicle_name][1]]
+            goal_reached[vehicle_name] = torch.all(torch.abs(vehicle_state - goal_states[vehicle_name]) < tolerances[vehicle_name], dim=1)
+            all_goals_reached = torch.logical_and(all_goals_reached, goal_reached[vehicle_name])
+        return all_goals_reached, goal_reached
 
-    return goal_state, goal_test
+    return objectives, goal_states, goal_test
 
 
 if __name__ == "__main__":
