@@ -3,11 +3,11 @@ Simulation models for UGV and quadrotor
 Author: rzfeng
 '''
 from abc import ABC, abstractmethod, abstractclassmethod
-from copy import deepcopy
 from dataclasses import dataclass
-from typing import Optional, List, Tuple, Dict, Callable
+from typing import Optional, List, Tuple, Dict
 
 import torch
+from torch.distributions.multivariate_normal import MultivariateNormal
 import numpy as np
 from torchdiffeq import odeint
 from scipy.spatial.transform import Rotation as R
@@ -19,14 +19,13 @@ from matplotlib.patches import Rectangle, Circle
 from mpl_toolkits.mplot3d import Axes3D
 
 from src.utils import wrap_radians, ned_to_nwu, nwu_to_ned
-from src.integration import ExplicitEulerIntegrator
 
 
 # Class for describing a state or control variable
 @dataclass
 class VarDescription:
     name: str
-    var_type: str # real or circle
+    var_type: str # real, circle
     description: str
     unit: str
 
@@ -37,13 +36,18 @@ class Vehicle(ABC):
     # @input radius [float]: radius for collision checking (cylinder approximation)
     # @input height [float]: height for collision checking (cylinder approximation)
     # @input vis_params [Dict("color": str)]: visualization parameters
-    def __init__(self, name: str, s0: torch.tensor, radius: float, height: float, vis_params: Dict):
+    # @input noise [Optional[torch.tensor (state_dim x state_dim)]]: co-variance matrix for Gaussian noise added to the state
+    def __init__(self, name: str, s0: torch.tensor, radius: float, height: float, vis_params: Dict, noise: Optional[torch.tensor] = None):
         assert(s0.size(0) == self.state_dim())
         self.name = name
         self._state = s0
         self.radius = radius
         self.height = height
         self.vis_params = vis_params
+        if noise is not None:
+            self.noise_dist = MultivariateNormal(torch.zeros(s0.size(0)), noise)
+        else:
+            self.noise_dist = None
 
     @abstractclassmethod
     def get_state_description(cls) -> List[VarDescription]:
@@ -84,7 +88,7 @@ class Vehicle(ABC):
                 self._state[i] = wrap_radians(torch.tensor([self._state[i]])).squeeze()
 
     def get_state(self):
-        return deepcopy(self._state)
+        return self._state.clone()
 
     # Computes the state derivatives for a batch of states and controls
     # @input t [torch.tensor (B)]: time points
@@ -94,30 +98,6 @@ class Vehicle(ABC):
     @abstractmethod
     def continuous_dynamics(self, t: torch.tensor, s: torch.tensor, u: torch.tensor) -> torch.tensor:
         raise NotImplementedError()
-
-    # Generates a discrete dynamics rollout function
-    # @input dt [float]: time step length
-    # @output [function(torch.tensor (B), torch.tensor (B x state_dim), torch.tensor (B x T x control_dim)) -> torch.tensor (B x T x state_dim)]:
-    #       dynamics rollout function
-    def generate_discrete_dynamics(self, dt: float) -> Callable[[torch.tensor, torch.tensor, torch.tensor], torch.tensor]:
-        # Discrete dynamics rollout function, rolling out a batch of initial states and times using a batch of control trajectories
-        # @input t [torch.tensor (B)]: batch of initial times
-        # @input s0 [torch.tensor (B x state_dim)]: batch of initial states
-        # @input u [torch.tensor (B x T x control_dim)]: batch of control trajectories
-        # @output [torch.tensor (B x T x state_dim)]: batch of state trajectories
-        def discrete_dynamics(t: torch.tensor, s0: torch.tensor, u: torch.tensor) -> torch.tensor:
-            B = t.size(0)
-            T = u.size(1)
-            state_dim = s0.size(1)
-
-            state_traj = torch.zeros((B, T, state_dim))
-            integrator = ExplicitEulerIntegrator(dt, self.continuous_dynamics)
-            curr_state = deepcopy(s0)
-            for t_idx in range(T):
-                curr_state = integrator(t+t_idx*dt, curr_state.unsqueeze(1), u[:,t_idx,:].unsqueeze(1)).squeeze(1)
-                state_traj[:,t_idx,:] = curr_state
-            return state_traj
-        return discrete_dynamics
 
     # Computes the Jacobians for a batch of states and controls
     # @input t [torch.tensor (B)]: time points
@@ -162,7 +142,10 @@ class Vehicle(ABC):
         for i in range(self.state_dim()):
             if state_description[i].var_type == "circle":
                 state_traj[:,i] = wrap_radians(state_traj[:,i])
-        self.set_state(state_traj[-1,:])
+        new_state = state_traj[-1,:]
+        if self.noise_dist is not None:
+            new_state += self.noise_dist.sample() * (t_span[1] - t_span[0])
+        self.set_state(new_state)
         return state_traj, timestamps
 
     # Extracts the SE(2) vehicle pose from a batch of states
@@ -219,8 +202,9 @@ class Unicycle(Vehicle):
     # @input vis_params [Dict("length": float, "width": float, "height": float,
     #                         "wheel_radius": float, "wheel_width": float, "color": str)]:
     #     paramters for vehicle visualization (length, width, height, wheel radius, wheel width, color)
-    def __init__(self, name: str, s0: torch.tensor, radius: float, height: float, vis_params: Dict):
-        super().__init__(name, s0, radius, height, vis_params)
+    # @input noise [Optional[torch.tensor (state_dim x state_dim)]]: co-variance matrix for Gaussian noise added to the state
+    def __init__(self, name: str, s0: torch.tensor, radius: float, height: float, vis_params: Dict, noise: Optional[torch.tensor] = None):
+        super().__init__(name, s0, radius, height, vis_params, noise)
 
     @classmethod
     def get_state_description(cls) -> List[VarDescription]:
@@ -314,9 +298,10 @@ class Bicycle(Vehicle):
     # @input vis_params [Dict("length": float, "width": float, "height": float,
     #                         "wheel_radius": float, "wheel_width": float, "color": str)]:
     #     paramters for vehicle visualization (length, width, height, wheel radius, wheel width, color)
+    # @input noise [Optional[torch.tensor (state_dim x state_dim)]]: co-variance matrix for Gaussian noise added to the state
     def __init__(self, name: str, s0: torch.tensor, radius: float, height: float,
-                 lf: float, lr: float, vis_params: Dict):
-        super().__init__(name, s0, radius, height, vis_params)
+                 lf: float, lr: float, vis_params: Dict, noise: Optional[torch.tensor] = None):
+        super().__init__(name, s0, radius, height, vis_params, noise)
         self.lf = lf
         self.lr = lr
 
@@ -415,10 +400,10 @@ class Quadrotor(Vehicle):
     # @input g [float]: acceleration from gravity
     # @input vis_params [Dict("side_length": float, "height": float, "prop_radius": float, "prop_height": float, "color": str)]:
     #     paramters for vehicle visualization (side length, height, propeller radius, propeller height, color)
-    # @input s0 [torch.tensor (state_dim)]: initial vehicle state
+    # @input noise [Optional[torch.tensor (state_dim x state_dim)]]: co-variance matrix for Gaussian noise added to the state
     def __init__(self, name: str, s0: torch.tensor, radius: float, height: float,
-                 m: float, inertia: torch.tensor, vis_params: Dict, g: float = 9.81):
-        super().__init__(name, s0, radius, height, vis_params)
+                 m: float, inertia: torch.tensor, vis_params: Dict, g: float = 9.81, noise: Optional[torch.tensor] = None):
+        super().__init__(name, s0, radius, height, vis_params, noise)
         self.m = m
         self.inertia = inertia
         self.g = g
@@ -586,9 +571,10 @@ class LinearizedQuadrotor(Vehicle):
     # @input g [float]: acceleration from gravity
     # @input vis_params [Dict("side_length": float, "height": float, "prop_radius": float, "prop_height": float, "color": str)]:
     #     paramters for vehicle visualization (side length, height, propeller radius, propeller height, color)
+    # @input noise [Optional[torch.tensor (state_dim x state_dim)]]: co-variance matrix for Gaussian noise added to the state
     def __init__(self, name: str, s0: torch.tensor, radius: float, height: float,
-                 m: float, inertia: torch.tensor, vis_params: Dict, g: float = 9.81):
-        super().__init__(name, s0, radius, height, vis_params)
+                 m: float, inertia: torch.tensor, vis_params: Dict, g: float = 9.81, noise: Optional[torch.tensor] = None):
+        super().__init__(name, s0, radius, height, vis_params, noise)
         self.m = m
         self.inertia = inertia
         self.g = g

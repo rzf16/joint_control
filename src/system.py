@@ -6,9 +6,12 @@ from copy import deepcopy
 from typing import Dict, Callable, Tuple, Optional, List
 
 import torch
+from torchdiffeq import odeint
 
-from src.vehicles import Vehicle
+from src.vehicles import Vehicle, VarDescription
 from src.recorder import DataRecorder
+from src.utils import generate_discrete_dynamics
+from src.integration import ExplicitEulerIntegrator
 
 
 class VehicleSystem:
@@ -26,7 +29,7 @@ class VehicleSystem:
                        terminal_costs: Dict[str, Optional[Callable[[torch.tensor], torch.tensor]]],
                        joint_running_costs: List[Callable[[torch.tensor, torch.tensor, torch.tensor], torch.tensor]],
                        joint_terminal_costs: List[Optional[Callable[[torch.tensor], torch.tensor]]]
-                       ):
+                ):
         self.vehicles = vehicles
         self.running_costs = running_costs
         self.terminal_costs = terminal_costs
@@ -59,7 +62,7 @@ class VehicleSystem:
         return sum([vehicle.control_dim() for vehicle in self.vehicles.values()])
 
     def get_state(self):
-        return deepcopy(self.state)
+        return self.state.clone()
 
     # Computes the state derivatives for a batch of states and controls
     # @input t [torch.tensor (B)]: time points
@@ -79,7 +82,7 @@ class VehicleSystem:
     # @output [function(torch.tensor (B), torch.tensor (B x state_dim), torch.tensor (B x T x control_dim)) -> torch.tensor (B x T x state_dim)]:
     #       dynamics rollout function
     def generate_discrete_dynamics(self, dt: float) -> Callable[[torch.tensor, torch.tensor, torch.tensor], torch.tensor]:
-        vehicle_fns = [vehicle.generate_discrete_dynamics(dt) for vehicle in self.vehicles.values()]
+        vehicle_fns = [generate_discrete_dynamics(dt, vehicle.continuous_dynamics) for vehicle in self.vehicles.values()]
         # Discrete dynamics rollout function, rolling out a batch of initial states and times using a batch of control trajectories
         # @input t [torch.tensor (B)]: batch of initial times
         # @input s0 [torch.tensor (B x state_dim)]: batch of initial states
@@ -96,12 +99,6 @@ class VehicleSystem:
                 vehicle_u = u[:,:,self.control_idxs[vehicle_name][0]:self.control_idxs[vehicle_name][1]]
                 state_traj[:,:,self.state_idxs[vehicle_name][0]:self.state_idxs[vehicle_name][1]] = vehicle_fn(t, vehicle_s0, vehicle_u)
             return state_traj
-            # integrator = ExplicitEulerIntegrator(dt, self.continuous_dynamics)
-            # curr_state = deepcopy(s0)
-            # for t_idx in range(T):
-            #     curr_state = integrator(t+t_idx*dt, curr_state.unsqueeze(1), u[:,t_idx,:].unsqueeze(1)).squeeze(1)
-            #     state_traj[:,t_idx,:] = curr_state
-            # return state_traj
         return discrete_dynamics
 
     # Joint running cost function, computing the cost for a batch of state and control trajectories
@@ -154,6 +151,3 @@ class VehicleSystem:
         state_traj = torch.cat(state_traj, dim=1)
         self.state = torch.cat([vehicle.get_state() for vehicle in self.vehicles.values()])
         return state_traj, timestamps
-
-
-# TODO: LatchingVehicleSystem

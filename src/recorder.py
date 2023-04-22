@@ -86,7 +86,7 @@ class DataRecorder:
         vehicle_names = [vehicle.name for vehicle in vehicles]
         for vehicle_name in vehicle_names:
             states, state_times = self.data[vehicle_name].state_traj.as_np()
-            controls, control_times = self.data[vehicle_name].state_traj.as_np()
+            controls, control_times = self.data[vehicle_name].control_traj.as_np()
             np.save(os.path.join(write_dir, f"{vehicle_name}_states.npy"), states)
             np.save(os.path.join(write_dir, f"{vehicle_name}_state_times.npy"), state_times)
             np.save(os.path.join(write_dir, f"{vehicle_name}_controls.npy"), controls)

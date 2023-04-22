@@ -146,7 +146,8 @@ def extract_vehicles(cfg: Dict) -> VehicleSystem:
                                               torch.tensor(vehicle_info["s0"]),
                                               vehicle_info["collision_radius"],
                                               vehicle_info["collision_height"],
-                                              vehicle_info["vis_params"])
+                                              vehicle_info["vis_params"],
+                                              noise=torch.diag(torch.tensor(vehicle_info["noise"])))
         elif vehicle_info["type"] == "bicycle":
             vehicles[vehicle_name] = Bicycle(vehicle_name,
                                              torch.tensor(vehicle_info["s0"]),
@@ -154,7 +155,8 @@ def extract_vehicles(cfg: Dict) -> VehicleSystem:
                                              vehicle_info["collision_height"],
                                              vehicle_info["lf"],
                                              vehicle_info["lr"],
-                                             vehicle_info["vis_params"])
+                                             vehicle_info["vis_params"],
+                                             noise=torch.diag(torch.tensor(vehicle_info["noise"])))
         elif vehicle_info["type"] == "quadrotor":
             if "g" in vehicle_info.keys():
                 vehicles[vehicle_name] = Quadrotor(vehicle_name,
@@ -164,7 +166,8 @@ def extract_vehicles(cfg: Dict) -> VehicleSystem:
                                                    vehicle_info["m"],
                                                    torch.tensor(vehicle_info["inertia"]),
                                                    vehicle_info["vis_params"],
-                                                   g=vehicle_info["g"])
+                                                   g=vehicle_info["g"],
+                                                   noise=torch.diag(torch.tensor(vehicle_info["noise"])))
             else:
                 vehicles[vehicle_name] = Quadrotor(vehicle_name,
                                                    torch.tensor(vehicle_info["s0"]),
@@ -172,7 +175,8 @@ def extract_vehicles(cfg: Dict) -> VehicleSystem:
                                                    vehicle_info["collision_height"],
                                                    vehicle_info["m"],
                                                    torch.tensor(vehicle_info["inertia"]),
-                                                   vehicle_info["vis_params"])
+                                                   vehicle_info["vis_params"],
+                                                   noise=torch.diag(torch.tensor(vehicle_info["noise"])))
         elif vehicle_info["type"] == "linearized_quadrotor":
             if "g" in vehicle_info.keys():
                 vehicles[vehicle_name] = LinearizedQuadrotor(vehicle_name,
@@ -182,7 +186,8 @@ def extract_vehicles(cfg: Dict) -> VehicleSystem:
                                                              vehicle_info["m"],
                                                              torch.tensor(vehicle_info["inertia"]),
                                                              vehicle_info["vis_params"],
-                                                             g=vehicle_info["g"])
+                                                             g=vehicle_info["g"],
+                                                             noise=torch.diag(torch.tensor(vehicle_info["noise"])))
             else:
                 vehicles[vehicle_name] = LinearizedQuadrotor(vehicle_name,
                                                              torch.tensor(vehicle_info["s0"]),
@@ -190,7 +195,8 @@ def extract_vehicles(cfg: Dict) -> VehicleSystem:
                                                              vehicle_info["collision_height"],
                                                              vehicle_info["m"],
                                                              torch.tensor(vehicle_info["inertia"]),
-                                                             vehicle_info["vis_params"])
+                                                             vehicle_info["vis_params"],
+                                                             noise=torch.diag(torch.tensor(vehicle_info["noise"])))
         else:
             print("[Main] Error! Unrecognized vehicle type.")
             exit()
