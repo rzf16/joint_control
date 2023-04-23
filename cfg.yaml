@@ -8,23 +8,23 @@ vehicles:
     lr: 1.0
     vis_params:
       width: 1.0
-      length: 3.0
+      length: 2.0
       height: 1.0
       wheel_radius: 0.25
       wheel_width: 0.1
       color: "lime"
-    collision_radius: 1.5
+    collision_radius: 1.0
     collision_height: 0.0
     noise: [0.1, 0.1, 0.1, 0.1]
 
     # Task parameters
-    s0: [0.0, -5.0, 0.0, 0.0]
+    s0: [0.0, 7.0, 0.0, 0.0]
     objective:
-      type: "goal"
-      goal: [10.0, 10.0, 0.7854, 0.0]
-      # type: "traj"
-      # traj: "bike1_traj.csv"
-      tolerance: [0.25, 0.25, 3.1416, 0.2]
+      # type: "goal"
+      # goal: [10.0, -5.0, -0.7854, 0.0]
+      type: "traj"
+      traj: "bike1_traj.csv"
+      tolerance: [0.5, 0.5, 3.1416, 0.2]
       Q_diag: [1.0, 1.0, 0.1, 1.0]
       R_diag: [2.0, 0.5]
     mppi_sigma_diag: [1.5, 0.5]
@@ -34,70 +34,36 @@ vehicles:
     write_data: False
     plot_state: False
     plot_control: False
-    plot_traj2d: False
+    plot_traj2d: True
     plot_traj3d: False
     animate2d: True
     animate3d: False
 
-  bike2:
-    # Vehicle parameters
-    type: "bicycle"
-    lf: 1.0
-    lr: 1.0
-    vis_params:
-      width: 1.0
-      length: 3.0
-      height: 1.0
-      wheel_radius: 0.25
-      wheel_width: 0.1
-      color: "deepskyblue"
-    collision_radius: 1.5
-    collision_height: 0.0
-    noise: [0.1, 0.1, 0.1, 0.1]
-
-    # Task parameters
-    s0: [0.0, 5.0, 0.0, 0.0]
-    objective:
-      type: "goal"
-      goal: [10.0, -10.0, -0.7854, 0.0]
-      tolerance: [0.25, 0.25, 3.1416, 0.2]
-      Q_diag: [1.0, 1.0, 0.1, 1.0]
-      R_diag: [2.0, 0.5]
-    mppi_sigma_diag: [1.5, 0.5]
-    cost_weight: 5.0
-
-    # Data recording/visualization flags
-    write_data: False
-    plot_state: False
-    plot_control: False
-    plot_traj2d: False
-    plot_traj3d: False
-    animate2d: True
-    animate3d: False
-
-  # quad1:
+  # bike2:
   #   # Vehicle parameters
-  #   type: "quadrotor"
-  #   m: 1.0
-  #   inertia: [0.3, 0.1, 0.5]
+  #   type: "bicycle"
+  #   lf: 1.0
+  #   lr: 1.0
   #   vis_params:
-  #     side_length: 0.5
-  #     height: 0.2
-  #     prop_radius: 0.1
-  #     prop_height: 0.1
+  #     width: 1.0
+  #     length: 2.0
+  #     height: 1.0
+  #     wheel_radius: 0.25
+  #     wheel_width: 0.1
   #     color: "deepskyblue"
-  #   collision_radius: 0.3
-  #   collision_height: 0.2
+  #   collision_radius: 1.0
+  #   collision_height: 0.0
+  #   noise: [0.1, 0.1, 0.1, 0.1]
 
   #   # Task parameters
-  #   s0: [0.0, -5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  #   s0: [0.0, -7.0, 0.0, 0.0]
   #   objective:
   #     type: "goal"
-  #     goal: [10.0, 10.0, -5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-  #     tolerance: [1.0, 1.0, 1.0, 3.1416, 3.1416, 3.1416, 0.25, 0.25, 0.25, 0.5, 0.5, 0.5]
-  #     Q_diag: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-  #     R_diag: [1.0, 1.0, 1.0, 1.0]
-  #   mppi_sigma_diag: [5.0, 0.5, 0.5, 0.5]
+  #     goal: [10.0, 5.0, 0.7854, 0.0]
+  #     tolerance: [0.5, 0.5, 3.1416, 0.2]
+  #     Q_diag: [1.0, 1.0, 0.1, 1.0]
+  #     R_diag: [2.0, 0.5]
+  #   mppi_sigma_diag: [1.5, 0.5]
   #   cost_weight: 1.0
 
   #   # Data recording/visualization flags
@@ -109,16 +75,83 @@ vehicles:
   #   animate2d: True
   #   animate3d: False
 
+  # bike3:
+  #   # Vehicle parameters
+  #   type: "bicycle"
+  #   lf: 1.0
+  #   lr: 1.0
+  #   vis_params:
+  #     width: 1.0
+  #     length: 2.0
+  #     height: 1.0
+  #     wheel_radius: 0.25
+  #     wheel_width: 0.1
+  #     color: "red"
+  #   collision_radius: 1.0
+  #   collision_height: 0.0
+  #   noise: [0.1, 0.1, 0.1, 0.1]
+
+  #   # Task parameters
+  #   s0: [0.0, 0.0, 0.0, 0.0]
+  #   objective:
+  #     type: "goal"
+  #     goal: [10.0, 0.0, 0.0, 0.0]
+  #     tolerance: [0.5, 0.5, 3.1416, 0.2]
+  #     Q_diag: [1.0, 1.0, 0.1, 1.0]
+  #     R_diag: [2.0, 0.5]
+  #   mppi_sigma_diag: [1.5, 0.5]
+  #   cost_weight: 1.0
+
+  #   # Data recording/visualization flags
+  #   write_data: False
+  #   plot_state: False
+  #   plot_control: False
+  #   plot_traj2d: False
+  #   plot_traj3d: False
+  #   animate2d: True
+  #   animate3d: False
+
+  quad1:
+    # Vehicle parameters
+    type: "quadrotor"
+    m: 1.0
+    inertia: [0.3, 0.1, 0.5]
+    vis_params:
+      side_length: 0.5
+      height: 0.2
+      prop_radius: 0.1
+      prop_height: 0.1
+      color: "deepskyblue"
+    collision_radius: 0.3
+    collision_height: 0.2
+
+    # Task parameters
+    s0: [0.0, -5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    objective:
+      type: "goal"
+      goal: [10.0, 10.0, -5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+      tolerance: [1.0, 1.0, 1.0, 3.1416, 3.1416, 3.1416, 0.25, 0.25, 0.25, 0.5, 0.5, 0.5]
+      Q_diag: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+      R_diag: [1.0, 1.0, 1.0, 1.0]
+    mppi_sigma_diag: [5.0, 0.5, 0.5, 0.5]
+    cost_weight: 1.0
+
+    # Data recording/visualization flags
+    write_data: False
+    plot_state: False
+    plot_control: False
+    plot_traj2d: True
+    plot_traj3d: False
+    animate2d: True
+    animate3d: False
+
 # Cylindrical obstacles
-obstacles:
-  - center: [5.0, 5.0]
-    radius: 2.0
-    height: 2.0
+obstacles: []
 
 # MPPI parameters
 mppi:
   dt: 0.1
-  horizon: 15
+  horizon: 10
   n_samples: 10000
   lambda_: 0.01
   warm_start_steps: 10

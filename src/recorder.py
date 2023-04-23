@@ -230,8 +230,8 @@ class DataRecorder:
         if not vehicles:
             return
 
-        # TODO: move the legend off the plot
         fig = plt.figure()
+        plt.tight_layout()
         ax = plt.axes(aspect="equal")
 
         state_trajs = [self.data[vehicle.name].state_traj.as_np() for vehicle in vehicles]
@@ -306,7 +306,7 @@ class DataRecorder:
         vehicle_legend_patches = []
         for vehicle in vehicles:
             vehicle_legend_patches.append(Patch(color=vehicle.vis_params["color"], label=vehicle.name))
-        ax.legend(handles=[*vehicle_legend_patches, *objective_legend_patches], loc="upper left")
+        ax.legend(handles=[*vehicle_legend_patches, *objective_legend_patches], loc="center left", bbox_to_anchor=(-0.80,0.5))
         ax.set_title(f"2D trajectory animation")
         ax.set_xlabel("x")
         ax.set_ylabel("y")

@@ -89,7 +89,7 @@ def main():
         print(f"{vehicle_name} final state: {vehicle.get_state().tolist()}")
         print(f"{vehicle_name} goal error: {(vehicle.get_state() - goal_states[vehicle_name]).tolist()}")
         print("\n")
-    print(f"Average MPPI compute time: {sum(times) / len(times)} seconds")
+    print(f"Average MPPI compute time: {sum(times) * 1000 / len(times)} milliseconds")
 
     # Data recording and visualization
     system.recorder.write_data(CFG_PATH,

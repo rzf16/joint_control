@@ -97,9 +97,9 @@ def generate_obstacle_cost(vehicle: Vehicle, obstacles: torch.tensor, cost: floa
         # Check for obstacle collisions
         batch_pos = pos.repeat(N,1,1,1)
         obstacle_collision = torch.any(torch.logical_and(
-            torch.any(batch_pos[:,:,:,2] - 0.5*vehicle.height < obstacles[:,3], dim=2),
+            torch.any((batch_pos[:,:,:,2] - 0.5*vehicle.height) < obstacles[:,3].reshape(-1,1,1), dim=2),
             torch.any(torch.linalg.norm(batch_pos[:,:,:,:2] - obstacles[:,:2].reshape(N,1,1,2), dim=3) < \
-                      (vehicle.radius + obstacles[:,2]), dim=2)
+                      (vehicle.radius + obstacles[:,2].reshape(-1,1,1)), dim=2)
         ).transpose(0,1), dim=1)
 
         return cost * torch.logical_or(ground_collision, obstacle_collision).float()
